@@ -1,18 +1,20 @@
-name: Release
+name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
-  release:
+  build-and-release:
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Configurar Python
         uses: actions/setup-python@v4
@@ -25,13 +27,11 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      
       - name: Criar executável com PyInstaller
         run: |
           mkdir -p dist
           pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
 
-      
       - name: Gerar Certificado Autoassinado
         shell: pwsh
         run: |
@@ -42,34 +42,36 @@ jobs:
           $password = ConvertTo-SecureString -String "R@nd0mÇçP@ss789!" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
 
-      
       - name: Assinar o executável
         shell: pwsh
-        
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
           $password = "R@nd0mÇçP@ss789!"
           $executable = "dist\UnityPackageForge.exe"
           &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
-      - name: Upload do executável
+      # Este passo é apenas para depuração, para verificar se o arquivo existe
+      - name: Verificar arquivos na pasta dist
+        run: ls -la dist
+
+      # Este passo é útil para depurar o workflow e garantir que o executável foi criado
+      - name: Upload do executável como artifact (para depuração)
         uses: actions/upload-artifact@v4
         with:
-          name: UnityPackageForge
+          name: UnityPackageForge-Debug
           path: dist/UnityPackageForge.exe
-          
-          
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18.x'
           cache: 'npm'
 
-      - name: Instalar dependências Node
-        run: npm ci || npm install
+      - name: Instalar dependências do semantic-release
+        run: |
+          npm install --save-dev semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git
 
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release 
-      
+        run: npx semantic-release
