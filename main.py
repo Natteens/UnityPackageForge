@@ -4,7 +4,6 @@ import subprocess
 import customtkinter as ctk
 from ui.ctk_generator_gui import PackageGeneratorGUI
 
-
 def start_gui():
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme("blue")
@@ -19,7 +18,6 @@ def start_gui():
 
     app = PackageGeneratorGUI(root)
     root.mainloop()
-
 
 if __name__ == "__main__":
     try:
