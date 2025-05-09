@@ -60,7 +60,7 @@ jobs:
         shell: pwsh
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
-          $password = ${{ secrets.CERTIFICATE_PASSWORD || 'R@nd0mÇçP@ss789!' }}
+          $password = "R@nd0mÇçP@ss789!"
           $executable = "dist\UnityPackageForge.exe"
           &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
