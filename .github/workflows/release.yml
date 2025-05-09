@@ -52,7 +52,7 @@ jobs:
 
       # Este passo é apenas para depuração, para verificar se o arquivo existe
       - name: Verificar arquivos na pasta dist
-        run: ls -la dist
+        run: dir dist
 
       # Este passo é útil para depurar o workflow e garantir que o executável foi criado
       - name: Upload do executável como artifact (para depuração)
