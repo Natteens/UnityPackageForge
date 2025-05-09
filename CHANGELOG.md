@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/Natteens/UnityPackageForge/compare/v1.0.1...v1.0.2) (2025-05-09)
+
+
+### Bug Fixes
+
+*  simple testing app ([8ba0986](https://github.com/Natteens/UnityPackageForge/commit/8ba09866475ecd44b415d577e40f8c447f74f811))
+
 ## [1.0.1](https://github.com/Natteens/UnityPackageForge/compare/v1.0.0...v1.0.1) (2025-05-09)
 
 
