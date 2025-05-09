@@ -13,7 +13,6 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configurar Python
         uses: actions/setup-python@v4
@@ -31,16 +30,21 @@ jobs:
           mkdir -p dist
           pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
 
-      - name: Instalar certificado
-        shell: bash
+      - name: Gerar Certificado Autoassinado
+        shell: pwsh
         run: |
-          echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode > certificate.pfx
+          # Gerar um certificado autoassinado
+          $cert = New-SelfSignedCertificate -Type CodeSigning -Subject "CN=UnityPackageForge" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
+          
+          # Exportar o certificado para um arquivo PFX
+          $password = ConvertTo-SecureString -String "senha123" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
 
       - name: Assinar o executável
         shell: pwsh
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
-          $password = "${{ secrets.CERTIFICATE_PASSWORD }}"
+          $password = "R@nd0mÇçP@ss789!"
           $executable = "dist\UnityPackageForge.exe"
           &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
@@ -49,17 +53,3 @@ jobs:
         with:
           name: UnityPackageForge
           path: dist/UnityPackageForge.exe
-
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-
-      - name: Instalar dependências Node
-        run: npm ci || npm install
-
-      - name: Semantic Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
