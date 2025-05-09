@@ -614,12 +614,12 @@ class PackageGeneratorGUI:
         ttk.Label(form_frame, text="Nome interno:").grid(row=0, column=0, sticky=tk.W, pady=5)
         ttk.Entry(form_frame, textvariable=self.package_name_var, width=40, font=('Arial', 12)).grid(
             row=0, column=1, sticky=tk.EW, padx=5, pady=5)
-        ttk.Label(form_frame, text="Ex: statusforge").grid(row=0, column=2, sticky=tk.W, pady=5)
+        ttk.Label(form_frame, text="Ex: nomedopacote").grid(row=0, column=2, sticky=tk.W, pady=5)
         
         ttk.Label(form_frame, text="Nome de exibição:").grid(row=1, column=0, sticky=tk.W, pady=5)
         ttk.Entry(form_frame, textvariable=self.display_name_var, width=40, font=('Arial', 12)).grid(
             row=1, column=1, sticky=tk.EW, padx=5, pady=5)
-        ttk.Label(form_frame, text="Ex: Status Forge").grid(row=1, column=2, sticky=tk.W, pady=5)
+        ttk.Label(form_frame, text="Ex: Nome do Pacote").grid(row=1, column=2, sticky=tk.W, pady=5)
         
         ttk.Label(form_frame, text="Descrição:").grid(row=2, column=0, sticky=tk.W, pady=5)
         ttk.Entry(form_frame, textvariable=self.description_var, width=40, font=('Arial', 12)).grid(
