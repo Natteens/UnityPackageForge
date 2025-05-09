@@ -26,28 +26,23 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # Verificar e corrigir caminho do ícone usando PowerShell
-      - name: Verificar e corrigir caminho do ícone
-        shell: pwsh
-        run: |
-          if (!(Test-Path "src/ui/icon.ico")) {
-            Write-Error "Arquivo de ícone não encontrado no caminho esperado: src/ui/icon.ico"
-            exit 1
-          }
-
       - name: Criar executável com PyInstaller
         run: |
           mkdir -p dist
           pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
 
       - name: Instalar certificado
+        shell: bash
         run: |
           echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode > certificate.pfx
-        shell: bash
 
       - name: Assinar o executável
+        shell: pwsh
         run: |
-          'C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe' sign /f certificate.pfx /p ${{ secrets.CERTIFICATE_PASSWORD }} /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a "dist\UnityPackageForge.exe"
+          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
+          $password = "${{ secrets.CERTIFICATE_PASSWORD }}"
+          $executable = "dist\UnityPackageForge.exe"
+          &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
       - name: Upload do executável
         uses: actions/upload-artifact@v4
