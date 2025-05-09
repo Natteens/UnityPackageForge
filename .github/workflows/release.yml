@@ -37,7 +37,7 @@ jobs:
           $cert = New-SelfSignedCertificate -Type CodeSigning -Subject "CN=UnityPackageForge" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
           
           # Exportar o certificado para um arquivo PFX
-          $password = ConvertTo-SecureString -String "senha123" -Force -AsPlainText
+          $password = ConvertTo-SecureString -String "R@nd0mÇçP@ss789!" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
 
       - name: Assinar o executável
