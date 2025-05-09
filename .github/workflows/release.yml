@@ -26,10 +26,18 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      # Ajuste para garantir o caminho correto do ícone
+      - name: Verificar e corrigir caminho do ícone
+        run: |
+          if [ ! -f src/ui/icon.ico ]; then
+            echo "Arquivo de ícone não encontrado no caminho esperado: src/ui/icon.ico"
+            exit 1
+          fi
+
       - name: Criar executável com PyInstaller
         run: |
           mkdir -p dist
-          pyinstaller --onefile --noconsole --icon=ui/icon.ico src/main.py --name UnityPackageForge
+          pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
 
       - name: Instalar certificado
         run: |
@@ -45,7 +53,7 @@ jobs:
         with:
           name: UnityPackageForge
           path: dist/UnityPackageForge.exe
-        
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
