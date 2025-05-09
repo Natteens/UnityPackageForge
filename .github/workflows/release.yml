@@ -26,13 +26,14 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # Ajuste para garantir o caminho correto do ícone
+      # Verificar e corrigir caminho do ícone usando PowerShell
       - name: Verificar e corrigir caminho do ícone
+        shell: pwsh
         run: |
-          if [ ! -f src/ui/icon.ico ]; then
-            echo "Arquivo de ícone não encontrado no caminho esperado: src/ui/icon.ico"
+          if (!(Test-Path "src/ui/icon.ico")) {
+            Write-Error "Arquivo de ícone não encontrado no caminho esperado: src/ui/icon.ico"
             exit 1
-          fi
+          }
 
       - name: Criar executável com PyInstaller
         run: |
