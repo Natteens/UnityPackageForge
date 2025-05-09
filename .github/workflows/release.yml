@@ -35,15 +35,12 @@ jobs:
       - name: Criar executável com PyInstaller
         run: |
           mkdir -p dist
-          pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
+          pyinstaller --onefile --noconsole --icon=ui/icon.ico main.py --name UnityPackageForge
 
       - name: Gerar Certificado Autoassinado
         shell: pwsh
         run: |
-          # Gerar um certificado autoassinado
           $cert = New-SelfSignedCertificate -Type CodeSigning -Subject "CN=UnityPackageForge" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
-
-          # Exportar o certificado para um arquivo PFX
           $password = ConvertTo-SecureString -String "R@nd0mÇçP@ss789!" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
 
@@ -55,7 +52,6 @@ jobs:
           $executable = "dist\UnityPackageForge.exe"
           &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
-      # Este passo é apenas para depuração, para verificar se o arquivo existe
       - name: Verificar arquivos na pasta dist
         run: dir dist
 
