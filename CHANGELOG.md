@@ -1,3 +1,11 @@
+## [1.0.3](https://github.com/Natteens/UnityPackageForge/compare/v1.0.2...v1.0.3) (2025-05-09)
+
+
+### Bug Fixes
+
+* corrigir importação do módulo strings na interface principal ([4004e2e](https://github.com/Natteens/UnityPackageForge/commit/4004e2e064022275fd30139dfc517c80289c70bf))
+* corrigir imports e ajustar paths no release.yml ([8f966ca](https://github.com/Natteens/UnityPackageForge/commit/8f966ca510e56378ddffb31ced2695854827d235))
+
 ## [1.0.2](https://github.com/Natteens/UnityPackageForge/compare/v1.0.1...v1.0.2) (2025-05-09)
 
 
