@@ -5,85 +5,71 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-
 jobs:
   release:
     runs-on: windows-latest
-
     steps:
-      # Checkout do código
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Configuração do Python
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # Instalar dependências Python
       - name: Instalar dependências Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # Criar executável com PyInstaller
+      
       - name: Criar executável com PyInstaller
         run: |
           mkdir -p dist
           pyinstaller --onefile --noconsole --icon=src/ui/icon.ico src/main.py --name UnityPackageForge
 
-      # Gerar certificado autoassinado (fallback)
+      
       - name: Gerar Certificado Autoassinado
-        if: ${{ secrets.CERTIFICATE_BASE64 == '' }}
         shell: pwsh
         run: |
+          # Gerar um certificado autoassinado
           $cert = New-SelfSignedCertificate -Type CodeSigning -Subject "CN=UnityPackageForge" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
+
+          # Exportar o certificado para um arquivo PFX
           $password = ConvertTo-SecureString -String "R@nd0mÇçP@ss789!" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
 
-      # Instalar certificado (se fornecido via secrets)
-      - name: Instalar certificado
-        if: ${{ secrets.CERTIFICATE_BASE64 != '' }}
-        shell: bash
-        run: |
-          echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode > certificate.pfx
-
-      # Assinar o executável
+      
       - name: Assinar o executável
         shell: pwsh
+        
         run: |
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
           $password = "R@nd0mÇçP@ss789!"
           $executable = "dist\UnityPackageForge.exe"
           &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
 
-      # Upload do executável
       - name: Upload do executável
         uses: actions/upload-artifact@v4
         with:
           name: UnityPackageForge
           path: dist/UnityPackageForge.exe
-
-      # Configuração do Node.js
+          
+          
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18.x'
           cache: 'npm'
 
-      # Instalar dependências Node.js
       - name: Instalar dependências Node
         run: npm ci || npm install
 
-      # Executar Semantic Release
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: npx semantic-release 
+      
