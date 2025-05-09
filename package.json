@@ -1,0 +1,19 @@
+{
+  "name": "unity-package-forge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gerador de pacotes para Unity com integração GitHub",
+  "scripts": {
+    "semantic-release": "semantic-release"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Natteens/UnityPackageForge.git"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^9.2.1",
+    "semantic-release": "^22.0.5"
+  }
+}
