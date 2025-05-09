@@ -1,10 +1,15 @@
-name: Build and Release
+name: Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   build-and-release:
@@ -54,13 +59,6 @@ jobs:
       - name: Verificar arquivos na pasta dist
         run: dir dist
 
-      # Este passo é útil para depurar o workflow e garantir que o executável foi criado
-      - name: Upload do executável como artifact (para depuração)
-        uses: actions/upload-artifact@v4
-        with:
-          name: UnityPackageForge-Debug
-          path: dist/UnityPackageForge.exe
-
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
@@ -69,8 +67,26 @@ jobs:
 
       - name: Instalar dependências do semantic-release
         run: |
-          npm install --save-dev semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git
+          npm install --save-dev semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator
 
+      - name: Criar arquivo de configuração do semantic-release
+        run: |
+          @"
+          {
+            "branches": ["main"],
+            "plugins": [
+              "@semantic-release/commit-analyzer",
+              "@semantic-release/release-notes-generator",
+              "@semantic-release/changelog",
+              ["@semantic-release/github", {
+                "assets": [
+                  {"path": "dist/UnityPackageForge.exe", "label": "UnityPackageForge.exe"}
+                ]
+              }],
+              "@semantic-release/git"
+            ]
+          }
+          "@ | Out-File -FilePath .releaserc.json -Encoding UTF8
 
       - name: Semantic Release
         env:
