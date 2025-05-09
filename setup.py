@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="unity-package-generator",
+    name="unity-package-forge",
     version="0.0.1",
     packages=find_packages(),
     install_requires=[
@@ -9,11 +9,11 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'package-generator=package_generator:main',
+            'package-generator=src.main:main',
         ],
     },
     author="Natteens",
     description="Gerador de pacotes para Unity com integração GitHub",
-    keywords="unity, package, generator",
+    keywords="unity, package, forge",
     python_requires=">=3.6",
 )

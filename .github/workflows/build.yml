@@ -37,4 +37,4 @@ jobs:
 
       - name: Testar Python
         run: |
-          python -c "import package_generator" || echo "Verificação básica realizada"
+          python -c "import src.main" || echo "Verificação básica realizada"
