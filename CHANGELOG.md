@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Natteens/UnityPackageForge/compare/v1.0.0...v1.0.1) (2025-05-09)
+
+
+### Bug Fixes
+
+* Refatoração do sistema ([c1c5501](https://github.com/Natteens/UnityPackageForge/commit/c1c5501b5b7ff9df3b7bd85ca014a96a92435c8e))
+
 # 1.0.0 (2025-05-09)
 
 
