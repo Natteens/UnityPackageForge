@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/Natteens/UnityPackageForge/compare/v1.0.3...v1.0.4) (2025-05-10)
+
+
+### Bug Fixes
+
+* corrige bugs na geração de repositórios e estrutura de pacotes Unity ([b2770c3](https://github.com/Natteens/UnityPackageForge/commit/b2770c3c915ba7c6cfae130ceefb3d9ab134c66b)), closes [#1](https://github.com/Natteens/UnityPackageForge/issues/1)
+
 ## [1.0.3](https://github.com/Natteens/UnityPackageForge/compare/v1.0.2...v1.0.3) (2025-05-09)
 
 
