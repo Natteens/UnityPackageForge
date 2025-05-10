@@ -444,69 +444,72 @@ class PackageGeneratorGUI:
         if message:
             self.progress_label.configure(text=message)
             self.add_log(message)
-    
+
     def generate_package(self):
-        """Gera o pacote do Unity com as configurações atuais"""
-        # Validação básica
-        if not self.validate_form():
-            return
-        
-        # Loga início do processo
-        self.add_log(f"Iniciando geração do pacote: {self.package_name.get()}")
-        self.update_progress(0.0, "Iniciando geração...")
-        
-        try:
-            # Define a pasta base
-            base_path = self.folder_path.get()
-            
-            # Cria a estrutura do pacote
-            self.package_generator.create_package_structure(
-                base_path=base_path,
-                name=self.package_name.get(),
-                display_name=self.display_name.get(),
-                description=self.description.get(),
-                create_samples=self.create_samples.get(),
-                create_runtime=self.create_runtime.get(),
-                create_editor=self.create_editor.get(),
-                create_tests=self.create_tests.get(),
-                create_github=self.create_github.get(),
-                create_license=self.license_type.get()
-            )
-            
-            self.update_progress(0.8, "Pacote criado com sucesso!")
-            
-            # Se solicitado, inicializa o repositório GitHub
-            if self.create_repo.get() and self.github_manager.is_configured():
-                self.add_log("Criando repositório no GitHub...")
-                
-                repo_name = self.package_generator.get_full_package_name(self.package_name.get())
-                
-                # Cria o repositório no GitHub
-                repo_data = self.github_manager.create_repository(
-                    name=repo_name,
-                    description=self.description.get(),
-                    private=self.repo_private.get()
-                )
-                
-                # Se criou o repositório com sucesso
-                if repo_data and 'clone_url' in repo_data:
-                    self.add_log(f"Repositório criado: {repo_data['html_url']}")
-                    
-                    # Configura o repositório local e faz o push
-                    self.github_manager.setup_repository(
-                        folder_path=os.path.join(base_path, repo_name),
-                        repo_name=repo_name,
-                        repo_url=repo_data['clone_url'],
-                        callback=self.handle_setup_progress
-                    )
-                else:
-                    self.add_log("Erro ao criar repositório no GitHub")
-            
-            self.update_progress(1.0, "Pacote gerado com sucesso!")
-        except Exception as e:
-            self.add_log(f"Erro ao gerar pacote: {str(e)}")
-            self.update_progress(0, "Erro ao gerar pacote")
-    
+     """Gera o pacote do Unity com as configurações atuais"""
+     # Validação básica
+     if not self.validate_form():
+         return
+
+     # Loga início do processo
+     self.add_log(f"Iniciando geração do pacote: {self.package_name.get()}")
+     self.update_progress(0.0, "Iniciando geração...")
+
+     try:
+         # Define a pasta base
+         base_path = self.folder_path.get()
+         package_name = self.package_name.get()
+         display_name = self.display_name.get()
+         description = self.description.get()
+
+         # Cria a estrutura do pacote (agora retorna o caminho da pasta do pacote)
+         package_folder = self.package_generator.create_package_structure(
+             base_path=base_path,
+             name=package_name,
+             display_name=display_name,
+             description=description,
+             create_samples=self.create_samples.get(),
+             create_runtime=self.create_runtime.get(),
+             create_editor=self.create_editor.get(),
+             create_tests=self.create_tests.get(),
+             create_github=self.create_github.get(),
+             create_license=self.license_type.get()
+         )
+
+         if not package_folder:
+             self.add_log("❌ Falha ao criar estrutura do pacote.")
+             self.update_progress(0, "Erro ao gerar pacote")
+             return
+
+         self.update_progress(0.8, "Pacote criado com sucesso!")
+
+         # Se solicitado, inicializa o repositório GitHub
+         if self.create_repo.get() and self.github_manager.is_configured():
+             self.add_log("Criando repositório no GitHub...")
+
+             # Obtém o nome completo do pacote para o repositório
+             full_package_name = self.package_generator.get_full_package_name(package_name)
+
+             # Método aprimorado de criação e configuração do repositório
+             success, repo_url = self.github_manager.create_and_setup_repository(
+                 package_folder=package_folder,
+                 package_name=full_package_name,
+                 package_description=description,
+                 is_private=self.repo_private.get(),
+                 status_callback=self.handle_setup_progress
+             )
+
+             if success:
+                 self.add_log(f"✅ Repositório em criação: {repo_url}")
+                 # A navegação para o repositório será feita pelo callback quando o setup estiver completo
+             else:
+                 self.add_log("❌ Erro ao criar repositório no GitHub")
+
+         self.update_progress(1.0, "Pacote gerado com sucesso!")
+     except Exception as e:
+         self.add_log(f"❌ Erro ao gerar pacote: {str(e)}")
+         self.update_progress(0, "Erro ao gerar pacote")
+     
     def handle_setup_progress(self, success, message, progress=None):
         """Manipula o progresso da configuração do git
         

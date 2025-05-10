@@ -2,89 +2,101 @@ import os
 import json
 from datetime import datetime
 
-
 class PackageGenerator:
     def __init__(self, config_manager):
         self.config = config_manager
         self.log_callback = print
         self.progress_callback = None
-    
-    def set_log_callback(self, callback): 
+
+    def set_log_callback(self, callback):
         self.log_callback = callback
-        
-    def set_progress_callback(self, callback): 
+
+    def set_progress_callback(self, callback):
         self.progress_callback = callback
-        
-    def log(self, message): 
-        if self.log_callback: 
+
+    def log(self, message):
+        if self.log_callback:
             self.log_callback(message)
-            
-    def update_progress(self, value, message=""): 
-        if self.progress_callback: 
+
+    def update_progress(self, value, message=""):
+        if self.progress_callback:
             self.progress_callback(value, message)
-    
+
     def get_package_json(self, name, display_name, description, version="0.0.1"):
         company_prefix = self.config.get_value(key='company_prefix')
         author_name = self.config.get_value(key='author_name')
         author_email = self.config.get_value(key='author_email')
         author_url = self.config.get_value(key='author_url')
         unity_version = self.config.get_value(key='unity_version')
-        
+
         return {
-            "name": f"{company_prefix}.{name.lower()}", 
-            "version": version, 
+            "name": f"{company_prefix}.{name.lower()}",
+            "version": version,
             "displayName": display_name,
-            "description": description, 
+            "description": description,
             "keywords": ["Unity", "GameDev", name],
             "author": {
-                "name": author_name, 
-                "email": author_email, 
+                "name": author_name,
+                "email": author_email,
                 "url": author_url
             },
             "unity": unity_version,
             "samples": [
                 {
-                    "displayName": "2D Sample", 
-                    "description": f"Exemplo demonstrando o uso do {display_name} em um jogo 2D.", 
+                    "displayName": "2D Sample",
+                    "description": f"Exemplo demonstrando o uso do {display_name} em um jogo 2D.",
                     "path": "Samples~/2D Sample"
                 },
                 {
-                    "displayName": "3D Sample", 
-                    "description": f"Exemplo demonstrando o uso do {display_name} em um jogo 3D.", 
+                    "displayName": "3D Sample",
+                    "description": f"Exemplo demonstrando o uso do {display_name} em um jogo 3D.",
                     "path": "Samples~/3D Sample"
                 },
                 {
-                    "displayName": "Utilities Sample", 
-                    "description": "Utilitários e prefabs de exemplo para testes e desenvolvimento.", 
+                    "displayName": "Utilities Sample",
+                    "description": "Utilitários e prefabs de exemplo para testes e desenvolvimento.",
                     "path": "Samples~/Utilities Sample"
                 }
             ],
-            "documentationUrl": f"{author_url}/{name}", 
+            "documentationUrl": f"{author_url}/{name}",
             "changelogUrl": f"{author_url}/{name}/blob/main/CHANGELOG.md",
             "licensesUrl": f"{author_url}/{name}/blob/main/LICENSE.md"
         }
-    
+
     def get_full_package_name(self, name):
         company_prefix = self.config.get_value(key='company_prefix')
         return f"{company_prefix}.{name.lower()}"
-    
-    def create_package_structure(self, base_path, name, display_name, description, create_samples=True, 
-                                create_runtime=True, create_editor=True, create_tests=True,
-                                create_github=True, create_license="MIT"):
+
+    def create_package_structure(self, base_path, name, display_name, description, create_samples=True,
+                                 create_runtime=True, create_editor=True, create_tests=True,
+                                 create_github=True, create_license="MIT"):
+        """
+        Cria a estrutura do pacote Unity dentro de uma única pasta com o nome correto do pacote.
+        Retorna o caminho completo da pasta criada para operações Git posteriores.
+        """
         try:
-            if not os.path.exists(base_path):
-                os.makedirs(base_path)
-                self.log(f"📁 Diretório principal criado: {base_path}")
-            
+            # Criar a pasta principal com o nome completo do pacote
+            full_package_name = self.get_full_package_name(name)
+            package_folder_path = os.path.join(base_path, full_package_name)
+
+            # Verificar se a pasta já existe
+            if not os.path.exists(package_folder_path):
+                os.makedirs(package_folder_path)
+                self.log(f"📁 Diretório principal criado: {package_folder_path}")
+            else:
+                self.log(f"📁 Utilizando diretório existente: {package_folder_path}")
+
             self.update_progress(10, "Iniciando criação do pacote...")
-            
+
+            # Criar arquivo package.json
             self._create_file(
-                os.path.join(base_path, "package.json"), 
+                os.path.join(package_folder_path, "package.json"),
                 json.dumps(self.get_package_json(name, display_name, description), indent=2)
             )
-            
+
             self.update_progress(20, "Criando arquivo package.json...")
-            
+
+            # Criar README.md
             readme_content = (
                 f"# {display_name}\n\n{description}\n\n## 📥 Instalação\n\n"
                 f"Este pacote pode ser instalado através do Unity Package Manager.\n\n"
@@ -93,81 +105,93 @@ class PackageGenerator:
                 f"3. Digite: https://github.com/Natteens/{name}.git\n\n"
                 f"## 🚀 Uso\n\n*Documentação em desenvolvimento*\n"
             )
-            self._create_file(os.path.join(base_path, "README.md"), readme_content)
-            
+            self._create_file(os.path.join(package_folder_path, "README.md"), readme_content)
+
+            # Criar CHANGELOG.md
             changelog_content = (
                 f"# 📝 Changelog\n\nTodos os lançamentos notáveis serão documentados neste arquivo.\n\n"
                 f"O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).\n\n"
                 f"## [Não lançado]\n\n### Adicionado\n- ✨ Estrutura inicial do pacote\n"
             )
-            self._create_file(os.path.join(base_path, "CHANGELOG.md"), changelog_content)
+            self._create_file(os.path.join(package_folder_path, "CHANGELOG.md"), changelog_content)
 
-            if create_license: 
-                self._create_license_file(base_path, create_license, name, display_name)
+            # Criar arquivo de licença se especificado
+            if create_license:
+                self._create_license_file(package_folder_path, create_license, name, display_name)
             self.update_progress(30, "Criando arquivos de documentação...")
 
-            if create_runtime: 
-                self._create_assembly_structure(base_path, name, "Runtime", False)
-            if create_editor: 
-                self._create_assembly_structure(base_path, name, "Editor", True)
+            # Criar estrutura de código
+            if create_runtime:
+                self._create_assembly_structure(package_folder_path, name, "Runtime", False)
+            if create_editor:
+                self._create_assembly_structure(package_folder_path, name, "Editor", True)
             self.update_progress(40, "Criando estrutura de código...")
-            
-            docs_path = os.path.join(base_path, "Documentation~")
+
+            # Criar documentação
+            docs_path = os.path.join(package_folder_path, "Documentation~")
             os.makedirs(docs_path, exist_ok=True)
             doc_content = (
                 f"# 📚 {display_name}\n\n{description}\n\n## 🚀 Início Rápido\n\n*Em desenvolvimento*\n"
             )
             self._create_file(os.path.join(docs_path, "index.md"), doc_content)
-            
+
             self.update_progress(50, "Criando documentação...")
-            
-            if create_samples: 
-                self._create_samples(base_path, name, display_name)
+
+            # Criar exemplos se solicitado
+            if create_samples:
+                self._create_samples(package_folder_path, name, display_name)
             self.update_progress(70, "Criando exemplos...")
-            
-            if create_tests: 
-                self._create_tests(base_path, name)
+
+            # Criar testes se solicitado
+            if create_tests:
+                self._create_tests(package_folder_path, name)
             self.update_progress(80, "Criando estrutura de testes...")
-            
-            if create_github: 
-                self._create_github_files(base_path)
-            
-            self.config.set_value(key='last_directory', value=os.path.dirname(base_path))
-            
+
+            # Criar arquivos do GitHub se solicitado
+            if create_github:
+                self._create_github_files(package_folder_path)
+
+            # Salvar o último diretório usado
+            self.config.set_value(key='last_directory', value=base_path)
+
             self.update_progress(100, "✅ Pacote criado com sucesso!")
             self.log("✅ Pacote criado com sucesso!")
-            return True
-            
+
+            # Retornar o caminho da pasta do pacote para operações Git
+            return package_folder_path
+
         except Exception as e:
             self.update_progress(100, f"❌ Erro: {str(e)}")
             self.log(f"❌ Erro ao criar pacote: {str(e)}")
-            return False
-    
+            return None
+
     def _create_file(self, path, content):
+        """Cria um arquivo garantindo que o diretório pai exista"""
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f: 
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         self.log(f"📄 Arquivo criado: {os.path.basename(path)}")
-    
+
     def _create_assembly_structure(self, base_path, package_name, folder_type, is_editor):
+        """Cria a estrutura de assembly do Unity para Runtime ou Editor"""
         folder_path = os.path.join(base_path, folder_type)
         os.makedirs(folder_path, exist_ok=True)
-        
+
         company_prefix = self.config.get_value(key='company_prefix')
         assembly_name = f"{company_prefix}.{package_name.lower()}" + (".editor" if is_editor else "")
-            
+
         asmdef = {
-            "name": assembly_name, 
-            "rootNamespace": f"Natteens.{package_name}", 
+            "name": assembly_name,
+            "rootNamespace": f"Natteens.{package_name}",
             "references": []
         }
-        
+
         if is_editor:
             asmdef["references"].append(f"{company_prefix}.{package_name.lower()}")
             asmdef["includePlatforms"] = ["Editor"]
-        
+
         self._create_file(os.path.join(folder_path, f"{assembly_name}.asmdef"), json.dumps(asmdef, indent=2))
-        
+
         if is_editor:
             editor_content = (
                 f"using UnityEngine;\nusing UnityEditor;\n\nnamespace Natteens.{package_name}\n{{\n"
@@ -184,11 +208,12 @@ class PackageGenerator:
                 f"// Implementação futura\n    }}\n}}\n"
             )
             self._create_file(os.path.join(folder_path, f"{package_name}Manager.cs"), manager_content)
-    
+
     def _create_license_file(self, base_path, license_type, name, display_name):
+        """Cria arquivo de licença apropriado"""
         year = datetime.now().year
         author_name = self.config.get_value(key='author_name')
-        
+
         if license_type == "MIT":
             content = (
                 f"MIT License\n\nCopyright (c) {year} {author_name}\n\n"
@@ -210,44 +235,46 @@ class PackageGenerator:
             )
         else:
             content = f"# Licença\nEste software está licenciado sob os termos da licença {license_type}."
-        
+
         self._create_file(os.path.join(base_path, "LICENSE.md"), content)
-    
+
     def _create_samples(self, base_path, name, display_name):
+        """Cria pastas e arquivos de exemplos"""
         samples_categories = ["2D Sample", "3D Sample", "Utilities Sample"]
         samples_base = os.path.join(base_path, "Samples~")
-        
+
         for category in samples_categories:
             category_path = os.path.join(samples_base, category)
             os.makedirs(category_path, exist_ok=True)
-            
+
             readme_content = (
                 f"# {category}\n\nExemplo para o pacote {display_name}.\n\n"
                 f"## Como usar\n\n1. Importe este sample pelo Unity Package Manager\n"
                 f"2. Abra a cena de exemplo\n3. Play\n"
             )
             self._create_file(os.path.join(category_path, "README.md"), readme_content)
-            
+
             scenes_path = os.path.join(category_path, "Scenes")
             os.makedirs(scenes_path, exist_ok=True)
-            
+
             self.log(f"📁 Amostra criada: {category}")
-    
+
     def _create_tests(self, base_path, name):
+        """Cria estrutura de testes"""
         tests_path = os.path.join(base_path, "Tests")
         os.makedirs(tests_path, exist_ok=True)
-        
+
         test_types = ["Editor", "Runtime"]
         company_prefix = self.config.get_value(key='company_prefix')
-        
+
         for test_type in test_types:
             test_folder = os.path.join(tests_path, test_type)
             os.makedirs(test_folder, exist_ok=True)
-            
+
             asmdef_name = f"{company_prefix}.{name.lower()}.{test_type.lower()}.tests"
             asmdef = {
                 "name": asmdef_name,
-                "rootNamespace": f"Exemple.{name}.Tests",
+                "rootNamespace": f"Natteens.{name}.Tests",
                 "references": [
                     "UnityEngine.TestRunner",
                     "UnityEditor.TestRunner",
@@ -258,29 +285,31 @@ class PackageGenerator:
                 "defineConstraints": ["UNITY_INCLUDE_TESTS"],
                 "precompiledReferences": ["nunit.framework.dll"]
             }
-            
+
             if test_type == "Editor":
                 asmdef["references"].append(f"{company_prefix}.{name.lower()}.editor")
-            
+
             self._create_file(os.path.join(test_folder, f"{asmdef_name}.asmdef"), json.dumps(asmdef, indent=2))
-            
+
             test_class_content = (
                 f"using System.Collections;\nusing System.Collections.Generic;\nusing NUnit.Framework;\n"
-                f"using UnityEngine;\nusing UnityEngine.TestTools;\nusing Exemple.{name};\n\n"
-                f"namespace Exempl.{name}.Tests\n{{\n    public class {name}Test{test_type}\n    {{\n        "
+                f"using UnityEngine;\nusing UnityEngine.TestTools;\nusing Natteens.{name};\n\n"
+                f"namespace Natteens.{name}.Tests\n{{\n    public class {name}Test{test_type}\n    {{\n        "
                 f"[Test]\n        public void {name}SimpleTest()\n        {{\n            "
                 f"// Arrange\n            // Act\n            // Assert\n            "
                 f"Assert.Pass(\"Teste passou!\");\n        }}\n    }}\n}}\n"
             )
             self._create_file(os.path.join(test_folder, f"{name}Test{test_type}.cs"), test_class_content)
-        
+
         self.log(f"📁 Testes criados: {tests_path}")
-    
+
     def _create_github_files(self, base_path):
+        """Cria arquivos de configuração do GitHub compatíveis com pacotes Unity"""
         github_dir = os.path.join(base_path, ".github")
         workflows_dir = os.path.join(github_dir, "workflows")
         os.makedirs(workflows_dir, exist_ok=True)
-        
+    
+        # Workflow de CI/CD modificado para pacotes Unity
         ci_workflow = {
             "name": "CI",
             "on": {
@@ -288,28 +317,27 @@ class PackageGenerator:
                 "pull_request": {"branches": ["main"]}
             },
             "jobs": {
-                "test": {
-                    "name": "Unity Tests",
+                "validate": {
+                    "name": "Validate Package",
                     "runs-on": "ubuntu-latest",
                     "steps": [
                         {"name": "Checkout repository", "uses": "actions/checkout@v2"},
                         {
-                            "name": "Setup Unity",
-                            "uses": "game-ci/unity-test-runner@v2",
-                            "env": {"UNITY_LICENSE": "${{ secrets.UNITY_LICENSE }}"},
-                            "with": {
-                                "projectPath": ".",
-                                "testMode": "all",
-                                "artifactsPath": "artifacts"
-                            }
+                            "name": "Validate Package",
+                            "run": "cat package.json | jq '.'"
+                        },
+                        {
+                            "name": "Check package structure",
+                            "run": "ls -la"
                         }
                     ]
                 }
             }
         }
-        
+    
         self._create_file(os.path.join(workflows_dir, "ci.yml"), json.dumps(ci_workflow, indent=2))
-        
+    
+        # Arquivo .gitignore específico para Unity
         gitignore_content = (
             "# Unity specific\nLibrary/\nTemp/\nLogs/\nUserSettings/\nobj/\nBuild/\nBuilds/\n"
             ".DS_Store\n*.csproj\n*.unityproj\n*.sln\n*.suo\n*.tmp\n*.user\n*.userprefs\n"
@@ -317,5 +345,9 @@ class PackageGenerator:
             "# IDE\n.vs/\n.idea/\n.vscode/\n"
         )
         self._create_file(os.path.join(base_path, ".gitignore"), gitignore_content)
-        
+    
+        # Adicionar arquivo de configuração para publicação futura no npm/OpenUPM
+        npmrc_content = "registry=https://registry.npmjs.org/\n"
+        self._create_file(os.path.join(base_path, ".npmrc"), npmrc_content)
+    
         self.log(f"📁 Configuração GitHub criada: {github_dir}")
