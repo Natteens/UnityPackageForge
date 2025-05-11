@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime
-
 from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
 
 
