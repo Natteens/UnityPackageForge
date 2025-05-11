@@ -99,6 +99,10 @@ Builds/
 .vs/
 .idea/
 .vscode/
+
+# Node.js
+node_modules/
+package-lock.json
 """
 
 # UI Strings
@@ -172,3 +176,65 @@ CREDENTIALS_INVALID = "❌ Credenciais inválidas!"
 CONFIG_SAVED = "✅ Configurações salvas com sucesso!"
 REPO_SUCCESS = "✅ Repositório criado com sucesso!"
 REPO_ERROR_PREFIX = "❌ Erro ao criar repositório: "
+
+# NOVOS TEMPLATES PARA SEMANTIC RELEASE
+
+# Template para arquivo .releaserc.json
+RELEASERC_JSON = """{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    ["@semantic-release/npm", { "npmPublish": false }],
+    ["@semantic-release/git", {
+      "assets": ["package.json", "CHANGELOG.md"],
+      "message": "chore(release): ${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
+    }],
+    "@semantic-release/github"
+  ]
+}"""
+
+# Template para o workflow de release
+RELEASE_WORKFLOW = """name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          # Removido cache para evitar erro por falta de lockfile
+
+      - name: Install dependencies (no lock)
+        run: npm install --no-package-lock
+
+      - name: Release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+"""

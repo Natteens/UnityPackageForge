@@ -2,6 +2,8 @@ import os
 import json
 from datetime import datetime
 
+from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
+
 class PackageGenerator:
     def __init__(self, config_manager):
         self.config = config_manager
@@ -308,8 +310,8 @@ class PackageGenerator:
         github_dir = os.path.join(base_path, ".github")
         workflows_dir = os.path.join(github_dir, "workflows")
         os.makedirs(workflows_dir, exist_ok=True)
-    
-        # Workflow de CI/CD modificado para pacotes Unity
+
+        # Workflow de CI/CD para pacotes Unity (existente)
         ci_workflow = {
             "name": "CI",
             "on": {
@@ -334,20 +336,45 @@ class PackageGenerator:
                 }
             }
         }
-    
+
         self._create_file(os.path.join(workflows_dir, "ci.yml"), json.dumps(ci_workflow, indent=2))
-    
+
+        # NOVO: Criar release.yml com o conteúdo da constante RELEASE_WORKFLOW
+        self._create_file(os.path.join(workflows_dir, "release.yml"), RELEASE_WORKFLOW)
+
+        # NOVO: Criar .releaserc.json na raiz do pacote
+        self._create_file(os.path.join(base_path, ".releaserc.json"), RELEASERC_JSON)
+
         # Arquivo .gitignore específico para Unity
         gitignore_content = (
             "# Unity specific\nLibrary/\nTemp/\nLogs/\nUserSettings/\nobj/\nBuild/\nBuilds/\n"
             ".DS_Store\n*.csproj\n*.unityproj\n*.sln\n*.suo\n*.tmp\n*.user\n*.userprefs\n"
             "*.pidb\n*.booproj\n*.svd\n*.pdb\n*.mdb\n*.opendb\n*.VC.db\n"
             "# IDE\n.vs/\n.idea/\n.vscode/\n"
+            "# Node.js\nnode_modules/\npackage-lock.json\n"
         )
         self._create_file(os.path.join(base_path, ".gitignore"), gitignore_content)
-    
+
+        # NOVO: Adicionar arquivo package.json.node para semantic-release
+        node_package = {
+            "name": os.path.basename(base_path).lower(),
+            "version": "0.0.0-development",
+            "private": True,
+            "devDependencies": {
+                "@semantic-release/changelog": "^6.0.3",
+                "@semantic-release/git": "^10.0.1",
+                "@semantic-release/github": "^8.0.7",
+                "semantic-release": "^21.0.5"
+            },
+            "scripts": {
+                "semantic-release": "semantic-release"
+            }
+        }
+        self._create_file(os.path.join(base_path, "package.json.node"), json.dumps(node_package, indent=2))
+
         # Adicionar arquivo de configuração para publicação futura no npm/OpenUPM
         npmrc_content = "registry=https://registry.npmjs.org/\n"
         self._create_file(os.path.join(base_path, ".npmrc"), npmrc_content)
-    
+
         self.log(f"📁 Configuração GitHub criada: {github_dir}")
+        self.log("🚀 Configuração para semantic-release criada com sucesso!")
