@@ -1,8 +1,7 @@
 import os
 import json
 from datetime import datetime
-
-from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
+from utils.strings import RELEASERC_JSON, RELEASE_WORKFLOW
 
 class PackageGenerator:
     def __init__(self, config_manager):
@@ -311,38 +310,10 @@ class PackageGenerator:
         workflows_dir = os.path.join(github_dir, "workflows")
         os.makedirs(workflows_dir, exist_ok=True)
 
-        # Workflow de CI/CD para pacotes Unity (existente)
-        ci_workflow = {
-            "name": "CI",
-            "on": {
-                "push": {"branches": ["main"]},
-                "pull_request": {"branches": ["main"]}
-            },
-            "jobs": {
-                "validate": {
-                    "name": "Validate Package",
-                    "runs-on": "ubuntu-latest",
-                    "steps": [
-                        {"name": "Checkout repository", "uses": "actions/checkout@v2"},
-                        {
-                            "name": "Validate Package",
-                            "run": "cat package.json | jq '.'"
-                        },
-                        {
-                            "name": "Check package structure",
-                            "run": "ls -la"
-                        }
-                    ]
-                }
-            }
-        }
-
-        self._create_file(os.path.join(workflows_dir, "ci.yml"), json.dumps(ci_workflow, indent=2))
-
-        # NOVO: Criar release.yml com o conteúdo da constante RELEASE_WORKFLOW
+        # Criar apenas o arquivo release.yml com o conteúdo da constante RELEASE_WORKFLOW
         self._create_file(os.path.join(workflows_dir, "release.yml"), RELEASE_WORKFLOW)
 
-        # NOVO: Criar .releaserc.json na raiz do pacote
+        # Criar .releaserc.json na raiz do pacote
         self._create_file(os.path.join(base_path, ".releaserc.json"), RELEASERC_JSON)
 
         # Arquivo .gitignore específico para Unity
@@ -355,7 +326,7 @@ class PackageGenerator:
         )
         self._create_file(os.path.join(base_path, ".gitignore"), gitignore_content)
 
-        # NOVO: Adicionar arquivo package.json.node para semantic-release
+        # Adicionar arquivo package.json.node para semantic-release
         node_package = {
             "name": os.path.basename(base_path).lower(),
             "version": "0.0.0-development",

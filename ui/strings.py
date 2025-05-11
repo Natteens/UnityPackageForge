@@ -195,8 +195,8 @@ RELEASERC_JSON = """{
   ]
 }"""
 
-# Template para o workflow de release
-RELEASE_WORKFLOW = """name: CI
+# Template atualizado para o workflow de release
+RELEASE_WORKFLOW = """name: release
 
 on:
   push:
