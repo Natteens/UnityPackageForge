@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/Natteens/UnityPackageForge/compare/v1.0.6...v1.1.0) (2025-05-11)
+
+
+### Features
+
+* updates no app ([a3b5ef9](https://github.com/Natteens/UnityPackageForge/commit/a3b5ef9d6bbc64c403fc7836eecf3359df9b6a5d))
+
 ## [1.0.4](https://github.com/Natteens/UnityPackageForge/compare/v1.0.3...v1.0.4) (2025-05-10)
 
 
