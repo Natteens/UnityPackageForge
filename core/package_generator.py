@@ -1,7 +1,9 @@
 import os
 import json
 from datetime import datetime
-from utils.strings import RELEASERC_JSON, RELEASE_WORKFLOW
+
+from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
+
 
 class PackageGenerator:
     def __init__(self, config_manager):
