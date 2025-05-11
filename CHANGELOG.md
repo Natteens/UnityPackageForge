@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/Natteens/UnityPackageForge/compare/v1.1.0...v1.1.1) (2025-05-11)
+
+
+### Bug Fixes
+
+* strings constants ([95544c1](https://github.com/Natteens/UnityPackageForge/commit/95544c1facb42bd935af72cbc0f5cbcda9abd3f1))
+
 # [1.1.0](https://github.com/Natteens/UnityPackageForge/compare/v1.0.6...v1.1.0) (2025-05-11)
 
 
