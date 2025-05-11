@@ -1,7 +1,6 @@
 import os
 from tkinter import filedialog, BooleanVar, StringVar, DoubleVar
 import customtkinter as ctk
-
 from ui.strings import *
 from config.config_manager import ConfigManager
 from core.github_manager import GitHubManager
