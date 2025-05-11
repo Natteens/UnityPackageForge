@@ -1,3 +1,10 @@
+## [1.0.6](https://github.com/Natteens/UnityPackageForge/compare/v1.0.5...v1.0.6) (2025-05-11)
+
+
+### Bug Fixes
+
+* hot fix de arquivos ([d915698](https://github.com/Natteens/UnityPackageForge/commit/d915698c95f3ad6306e4250fbe4b97d1148f9cb7))
+
 ## [1.0.5](https://github.com/Natteens/UnityPackageForge/compare/v1.0.4...v1.0.5) (2025-05-11)
 
 
