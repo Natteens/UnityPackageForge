@@ -215,16 +215,29 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
-          # Removido cache para evitar erro por falta de lockfile
+
+      - name: Filter Unity dependencies dynamically
+        run: |
+          # Identifica pacotes relacionados à Unity no package.json e os remove
+          unity_packages=$(jq -r '.dependencies | keys[] | select(test("unity|Unity|com.unity"))' package.json)
+          echo "Pacotes Unity encontrados: $unity_packages"
+
+          if [ -n "$unity_packages" ]; then
+            echo "Removendo pacotes Unity..."
+            for pkg in $unity_packages; do
+              jq "del(.dependencies[\"$pkg\"])" package.json > package.filtered.json
+              mv package.filtered.json package.json
+            done
+          fi
 
       - name: Install dependencies (no lock)
         run: npm install --no-package-lock
@@ -238,5 +251,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 """
-
-# Templates para arquivos de configuração do Semantic Release
