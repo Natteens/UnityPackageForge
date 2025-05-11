@@ -1,10 +1,3 @@
-## [1.0.5](https://github.com/Natteens/UnityPackageForge/compare/v1.0.4...v1.0.5) (2025-05-11)
-
-
-### Bug Fixes
-
-* semantic ajustado ([7f32201](https://github.com/Natteens/UnityPackageForge/commit/7f322011bf69000ca188262a621f540439743e6e))
-
 ## [1.0.4](https://github.com/Natteens/UnityPackageForge/compare/v1.0.3...v1.0.4) (2025-05-10)
 
 
