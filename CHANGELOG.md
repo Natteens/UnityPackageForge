@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/Natteens/UnityPackageForge/compare/v1.1.1...v1.1.2) (2025-05-21)
+
+
+### Bug Fixes
+
+* Update release.yml ([9f5be7d](https://github.com/Natteens/UnityPackageForge/commit/9f5be7d0f81f4ab6815a5815bf881ab3cebedb62))
+
 ## [1.1.1](https://github.com/Natteens/UnityPackageForge/compare/v1.1.0...v1.1.1) (2025-05-11)
 
 
