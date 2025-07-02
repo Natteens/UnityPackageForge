@@ -1,3 +1,10 @@
+## [1.2.4](https://github.com/Natteens/UnityPackageForge/compare/v1.2.3...v1.2.4) (2025-07-02)
+
+
+### Bug Fixes
+
+* Update GitHub workflows to properly handle semantic-release and build-executables ([77ddf90](https://github.com/Natteens/UnityPackageForge/commit/77ddf90d657d12175a4a20f83fc398e0b7af839e))
+
 ## [1.2.3](https://github.com/Natteens/UnityPackageForge/compare/v1.2.2...v1.2.3) (2025-07-02)
 
 
