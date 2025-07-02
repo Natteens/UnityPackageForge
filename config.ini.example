@@ -1,0 +1,15 @@
+[DEFAULT]
+last_directory = C:/path/to/your/projects
+author_name = Your Name
+author_email = your.email@example.com
+author_url = https://github.com/yourusername
+unity_version = 2023.3
+company_prefix = com.yourcompany
+dark_mode = True
+appearance_mode = Dark
+
+[github]
+username = yourusername
+token = your_github_token_here
+
+[dependencies]

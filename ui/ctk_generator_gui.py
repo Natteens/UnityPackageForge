@@ -1,18 +1,27 @@
 import os
-from tkinter import filedialog, BooleanVar, StringVar, DoubleVar
+import threading
+from datetime import datetime
+from tkinter import filedialog, messagebox, BooleanVar, StringVar, DoubleVar
 import customtkinter as ctk
 from ui.strings import *
 from config.config_manager import ConfigManager
 from core.github_manager import GitHubManager
 from core.package_generator import PackageGenerator
 from utils.helpers import open_folder, validate_package_name
+from utils.version_utils import get_current_version, extract_package_name_from_full_name
 
 class PackageGeneratorGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Unity Package Forge")
-        self.root.geometry("700, 650")
-        self.root.minsize(700, 650)
+        ctk.set_appearance_mode("dark")
+
+        self.root.title(f"Unity Package Forge v{get_current_version()}")
+        self.root.geometry("820x680")
+        self.root.minsize(800, 650)
+        self.root.resizable(True, True)
+
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(0, weight=1)
 
         self.config_manager = ConfigManager()
         self.github_manager = GitHubManager(self.config_manager)
@@ -22,12 +31,11 @@ class PackageGeneratorGUI:
         self.package_generator.set_progress_callback(self.update_progress)
 
         self.init_variables()
-        self.create_scrollable_ui()
+        self.create_ui()
         self.load_ui_values()
-        self.bind_scroll_events()
+        self.setup_bindings()
 
     def init_variables(self):
-        self.package_name = StringVar()
         self.display_name = StringVar()
         self.description = StringVar()
         self.version = StringVar(value="0.1.0")
@@ -39,6 +47,7 @@ class PackageGeneratorGUI:
         self.create_tests = BooleanVar(value=True)
         self.create_github = BooleanVar(value=True)
         self.license_type = StringVar(value="MIT")
+        self.custom_license_path = StringVar()
 
         self.create_repo = BooleanVar(value=False)
         self.repo_private = BooleanVar(value=False)
@@ -51,522 +60,944 @@ class PackageGeneratorGUI:
 
         self.github_username = StringVar()
         self.github_token = StringVar()
-        self.progress_var = DoubleVar()
 
-    def create_scrollable_ui(self):
+        self.progress_var = DoubleVar()
+        self.unity_dependencies = {}
+        self.selected_dependencies = []
+
+        self.display_name.trace('w', self.on_display_name_change)
+
+    def on_display_name_change(self, *args):
+        if hasattr(self, 'repo_preview_label'):
+            display_name = self.display_name.get()
+            if display_name:
+                from utils.version_utils import sanitize_name_for_repo
+                repo_name = sanitize_name_for_repo(display_name)
+                username = self.github_username.get() or "seuusuario"
+                self.repo_preview_label.configure(
+                    text=f"📋 URL: https://github.com/{username}/{repo_name}.git"
+                )
+            else:
+                self.repo_preview_label.configure(text="📋 URL será gerada automaticamente")
+
+    def create_ui(self):
         self.main_frame = ctk.CTkScrollableFrame(self.root)
-        self.main_frame.pack(fill="both", expand=True)
+        self.main_frame.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.main_frame.grid_columnconfigure(0, weight=1)
 
         self.create_header()
         self.create_tabs()
-        self.create_theme_button()
-
-    def bind_scroll_events(self):
-        self.main_frame.bind("<Enter>", lambda _: self.main_frame.bind_all("<MouseWheel>", self.on_mousewheel))
-        self.main_frame.bind("<Leave>", lambda _: self.main_frame.unbind_all("<MouseWheel>"))
-
-    def on_mousewheel(self, event):
-        self.main_frame._parent_canvas.yview_scroll(-1*(event.delta//120), "units")
 
     def create_header(self):
-        header_frame = ctk.CTkFrame(self.main_frame)
-        header_frame.pack(fill="x", pady=10)
+        header_frame = ctk.CTkFrame(self.main_frame, corner_radius=8)
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(
+        title = ctk.CTkLabel(
             header_frame,
-            text="Unity Package Forge",
-            font=ctk.CTkFont(size=20, weight="bold")
-        ).pack(pady=5)
-
-    def create_theme_button(self):
-        self.theme_button = ctk.CTkButton(
-            self.root,
-            text="☀️" if ctk.get_appearance_mode() == "Dark" else "🌙",
-            width=30,
-            height=30,
-            corner_radius=8,
-            command=self.toggle_theme
+            text="🚀 Unity Package Forge",
+            font=ctk.CTkFont(size=24, weight="bold")
         )
-        self.theme_button.place(relx=0.98, rely=0.02, anchor="ne")
+        title.grid(row=0, column=0, pady=12)
+
+        subtitle = ctk.CTkLabel(
+            header_frame,
+            text="Gerador profissional de pacotes Unity com integração GitHub",
+            font=ctk.CTkFont(size=12),
+            text_color="gray70"
+        )
+        subtitle.grid(row=1, column=0, pady=(0, 8))
 
     def create_tabs(self):
-        self.tab_view = ctk.CTkTabview(self.main_frame, width=750)
-        self.tab_view.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tab_view = ctk.CTkTabview(self.main_frame, height=550)
+        self.tab_view.grid(row=1, column=0, sticky="ew", pady=5)
+        self.tab_view.grid_columnconfigure(0, weight=1)
 
-        tabs = ["Pacote", "Configurações", "GitHub", "Debug", "Sobre"]
-        for tab in tabs:
-            self.tab_view.add(tab)
+        tabs = [
+            ("📦 Pacote", "Pacote"),
+            ("⚙️ Configurações", "Configurações"),
+            ("🐙 GitHub", "GitHub"),
+            ("🔧 Dependências", "Dependências"),
+            ("🐛 Debug", "Debug"),
+            ("ℹ️ Sobre", "Sobre")
+        ]
+
+        for tab_name, tab_key in tabs:
+            self.tab_view.add(tab_name)
 
         self.create_package_tab()
         self.create_config_tab()
         self.create_github_tab()
+        self.create_dependencies_tab()
         self.create_debug_tab()
         self.create_about_tab()
 
-    def toggle_theme(self):
-        new_mode = "Dark" if ctk.get_appearance_mode() == "Light" else "Light"
-        ctk.set_appearance_mode(new_mode)
-        self.theme_button.configure(text="☀️" if new_mode == "Light" else "🌙")
-        self.config_manager.set_value(key='dark_mode', value=str(new_mode == "Dark"))
+    def create_entry_row(self, parent, label, variable, placeholder="", row=0):
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.grid(row=row, column=0, sticky="ew", padx=12, pady=4)
+        frame.grid_columnconfigure(1, weight=1)
 
+        label_widget = ctk.CTkLabel(
+            frame,
+            text=label,
+            width=140,
+            anchor="w",
+            font=ctk.CTkFont(size=13),
+            height=32
+        )
+        label_widget.grid(row=0, column=0, sticky="w")
+
+        entry = ctk.CTkEntry(
+            frame,
+            textvariable=variable,
+            placeholder_text=placeholder,
+            height=32,
+            font=ctk.CTkFont(size=12)
+        )
+        entry.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        return entry
     def create_package_tab(self):
-        tab = self.tab_view.tab("Pacote")
-        self.create_form_section(tab, PACKAGE_FRAME_TITLE, [
-            (PACKAGE_NAME_LABEL, self.package_name, PACKAGE_NAME_PLACEHOLDER),
-            (DISPLAY_NAME_LABEL, self.display_name, DISPLAY_NAME_PLACEHOLDER),
-            (DESCRIPTION_LABEL, self.description, DESCRIPTION_PLACEHOLDER),
-            (VERSION_LABEL, self.version, ""),
-            (FOLDER_LABEL, self.folder_path, "", self.select_folder)
-        ])
+        tab = self.tab_view.tab("📦 Pacote")
+        tab.grid_columnconfigure(0, weight=1)
 
-        self.create_structure_section(tab)
-        self.create_github_section(tab)
-        self.create_action_buttons(tab)
+        main_section = self.create_section(tab, "📋 Informações do Pacote", 0)
 
-    def create_form_section(self, parent, title, fields):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", padx=10, pady=5)
+        self.create_entry_row(main_section, "🏷️  Nome de Exibição:", self.display_name,
+                              placeholder="Meu Incrível Pacote", row=1)
 
-        ctk.CTkLabel(frame, text=title, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=5, pady=5)
+        info_label = ctk.CTkLabel(
+            main_section,
+            text="💡 Nome usado no repositório GitHub e como base para tudo",
+            font=ctk.CTkFont(size=12),
+            text_color="orange"
+        )
+        info_label.grid(row=2, column=0, sticky="w", padx=16, pady=(0, 8))
 
-        for label, var, placeholder, *command in fields:
-            row = ctk.CTkFrame(frame)
-            row.pack(fill="x", padx=5, pady=2)
+        self.create_entry_row(main_section, "📝  Descrição:", self.description,
+                              placeholder="Uma descrição clara do que o pacote faz...", row=3)
 
-            ctk.CTkLabel(row, text=label, width=120).pack(side="left")
+        self.create_entry_row(main_section, "🔖  Versão Inicial:", self.version,
+                              placeholder="0.1.0", row=4)
 
-            if command:
-                entry_frame = ctk.CTkFrame(row, fg_color="transparent")
-                entry_frame.pack(side="left", fill="x", expand=True)
+        folder_frame = ctk.CTkFrame(main_section, fg_color="transparent")
+        folder_frame.grid(row=5, column=0, sticky="ew", padx=12, pady=4)
+        folder_frame.grid_columnconfigure(1, weight=1)
 
-                ctk.CTkEntry(
-                    entry_frame,
-                    textvariable=var,
-                    placeholder_text=placeholder
-                ).pack(side="left", fill="x", expand=True)
+        folder_label = ctk.CTkLabel(folder_frame, text="📁  Pasta de Destino:", width=140, anchor="w")
+        folder_label.grid(row=0, column=0, sticky="w")
 
-                ctk.CTkButton(
-                    entry_frame,
-                    text=SELECT_FOLDER_BUTTON,
-                    width=80,
-                    command=command[0]
-                ).pack(side="right", padx=5)
-            else:
-                ctk.CTkEntry(
-                    row,
-                    textvariable=var,
-                    placeholder_text=placeholder
-                ).pack(side="left", fill="x", expand=True)
+        entry_frame = ctk.CTkFrame(folder_frame, fg_color="transparent")
+        entry_frame.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        entry_frame.grid_columnconfigure(0, weight=1)
 
-    def create_structure_section(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", padx=10, pady=5)
+        folder_entry = ctk.CTkEntry(
+            entry_frame,
+            textvariable=self.folder_path,
+            placeholder_text="Selecione a pasta Packages do seu projeto Unity...",
+            height=32
+        )
+        folder_entry.grid(row=0, column=0, sticky="ew")
 
-        ctk.CTkLabel(frame, text=STRUCTURE_FRAME_TITLE, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=5, pady=5)
+        folder_btn = ctk.CTkButton(
+            entry_frame,
+            text="📂",
+            width=35,
+            height=32,
+            command=self.select_folder
+        )
+        folder_btn.grid(row=0, column=1, padx=(4, 0))
 
-        options_frame = ctk.CTkFrame(frame)
-        options_frame.pack(fill="x", padx=5, pady=5)
+        folder_info = ctk.CTkLabel(
+            main_section,
+            text="💡 Recomendado: Pasta 'Packages' do seu projeto Unity para teste direto",
+            font=ctk.CTkFont(size=12),
+            text_color="gray60"
+        )
+        folder_info.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 15))
+
+        license_section = self.create_section(tab, "📄 Licença", 1)
+
+        license_frame = ctk.CTkFrame(license_section, fg_color="transparent")
+        license_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
+        license_frame.grid_columnconfigure(1, weight=1)
+
+        license_label = ctk.CTkLabel(license_frame, text="📄  Tipo:", width=140, anchor="w")
+        license_label.grid(row=0, column=0, sticky="w")
+
+        license_combo = ctk.CTkComboBox(
+            license_frame,
+            values=["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "Unlicense", "Personalizada"],
+            variable=self.license_type,
+            command=self.on_license_change,
+            width=180,
+            height=32,
+            state="readonly"
+        )
+        license_combo.grid(row=0, column=1, sticky="w", padx=(4, 0))
+
+        self.custom_license_frame = ctk.CTkFrame(license_section, fg_color="transparent")
+        self.custom_license_frame.grid_columnconfigure(0, weight=1)
+
+        custom_entry = ctk.CTkEntry(
+            self.custom_license_frame,
+            textvariable=self.custom_license_path,
+            placeholder_text="Caminho para arquivo de licença...",
+            height=32
+        )
+        custom_entry.grid(row=0, column=0, sticky="ew", padx=(16, 4))
+
+        custom_btn = ctk.CTkButton(
+            self.custom_license_frame,
+            text="📂",
+            width=35,
+            height=32,
+            command=self.select_license_file
+        )
+        custom_btn.grid(row=0, column=1)
+
+        structure_section = self.create_section(tab, "🏗️ Estrutura do Pacote", 2)
+
+        checkbox_container = ctk.CTkFrame(structure_section, fg_color="transparent")
+        checkbox_container.grid(row=1, column=0, sticky="ew", padx=12, pady=12)
+
+        checkbox_container.grid_columnconfigure(0, weight=1, uniform="checkbox")
+        checkbox_container.grid_columnconfigure(1, weight=1, uniform="checkbox")
+        checkbox_container.grid_columnconfigure(2, weight=1, uniform="checkbox")
 
         checkboxes = [
-            (self.create_samples, CREATE_SAMPLES_LABEL),
-            (self.create_runtime, CREATE_RUNTIME_LABEL),
-            (self.create_editor, CREATE_EDITOR_LABEL),
-            (self.create_tests, CREATE_TESTS_LABEL),
-            (self.create_github, CREATE_GITHUB_LABEL)
+            ("📦  Samples", self.create_samples),
+            ("⚡  Runtime", self.create_runtime),
+            ("🛠️  Editor", self.create_editor),
+            ("🧪  Tests", self.create_tests),
+            ("🔧  GitHub Actions", self.create_github)
         ]
 
-        for i, (var, text) in enumerate(checkboxes):
-            ctk.CTkCheckBox(
-                options_frame,
+        for i, (text, var) in enumerate(checkboxes):
+            row_num = i // 3
+            col_num = i % 3
+
+            checkbox = ctk.CTkCheckBox(
+                checkbox_container,
                 text=text,
-                variable=var
-            ).grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
+                variable=var,
+                font=ctk.CTkFont(size=13),
+                checkbox_width=20,
+                checkbox_height=20
+            )
+            checkbox.grid(row=row_num, column=col_num, sticky="w", padx=(0, 10), pady=8)
 
-        license_frame = ctk.CTkFrame(options_frame)
-        license_frame.grid(row=2, column=1, sticky="w")
-        ctk.CTkLabel(license_frame, text=LICENSE_LABEL).pack(side="left")
-        ctk.CTkOptionMenu(
-            license_frame,
-            variable=self.license_type,
-            values=["MIT", "Apache-2.0", "GPL-3.0", "None"]
-        ).pack(side="left")
+        self.create_action_buttons(tab, 3)
+    def create_section(self, parent, title, row):
+        section = ctk.CTkFrame(parent, corner_radius=8)
+        section.grid(row=row, column=0, sticky="ew", pady=6)
+        section.grid_columnconfigure(0, weight=1)
 
-    def create_github_section(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", padx=10, pady=5)
+        title_label = ctk.CTkLabel(
+            section,
+            text=title,
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        title_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 6))
 
-        ctk.CTkLabel(frame, text=GITHUB_FRAME_TITLE, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=5, pady=5)
+        return section
 
-        options_frame = ctk.CTkFrame(frame)
-        options_frame.pack(fill="x", padx=5, pady=5)
+    def create_action_buttons(self, parent, row):
+        button_frame = ctk.CTkFrame(parent, corner_radius=8)
+        button_frame.grid(row=row, column=0, sticky="ew", pady=15)
+        button_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkCheckBox(
-            options_frame,
-            text=CREATE_REPO_LABEL,
-            variable=self.create_repo
-        ).pack(side="left", padx=5)
+        self.generate_btn = ctk.CTkButton(
+            button_frame,
+            text="🚀 Gerar Pacote Unity",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            height=40,
+            command=self.generate_package
+        )
+        self.generate_btn.grid(row=0, column=0, sticky="ew", padx=15, pady=12)
 
-        visibility_frame = ctk.CTkFrame(options_frame)
-        visibility_frame.pack(side="left", padx=10)
-        ctk.CTkLabel(visibility_frame, text=REPO_VISIBILITY_LABEL).pack(side="left")
-        ctk.CTkRadioButton(visibility_frame, text=PUBLIC_OPTION, variable=self.repo_private, value=False).pack(side="left")
-        ctk.CTkRadioButton(visibility_frame, text=PRIVATE_OPTION, variable=self.repo_private, value=True).pack(side="left")
+        self.progress_bar = ctk.CTkProgressBar(button_frame, variable=self.progress_var)
+        self.progress_bar.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 8))
 
-    def create_action_buttons(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", padx=10, pady=10)
+        self.status_label = ctk.CTkLabel(button_frame, text="", font=ctk.CTkFont(size=11))
+        self.status_label.grid(row=2, column=0, pady=(0, 10))
 
-        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        btn_frame.pack(pady=5)
+    def on_license_change(self, choice):
+        if choice == "Personalizada":
+            self.custom_license_frame.grid(row=2, column=0, sticky="ew", pady=(8, 12))
+        else:
+            self.custom_license_frame.grid_remove()
 
-        ctk.CTkButton(
-            btn_frame,
-            text=GENERATE_BUTTON,
-            command=self.generate_package,
-            width=120
-        ).pack(side="left", padx=5)
-
-        ctk.CTkButton(
-            btn_frame,
-            text=OPEN_FOLDER_BUTTON,
-            command=lambda: open_folder(self.folder_path.get()),
-            width=120
-        ).pack(side="left", padx=5)
-
-        self.progress_bar = ctk.CTkProgressBar(frame)
-        self.progress_bar.set(0)
-        self.progress_bar.pack(fill="x", pady=5)
-
-        self.progress_label = ctk.CTkLabel(frame, text="")
-        self.progress_label.pack()
+    def select_license_file(self):
+        file_path = filedialog.askopenfilename(
+            title="Selecionar arquivo de licença",
+            filetypes=[("Text files", "*.txt"), ("Markdown files", "*.md"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.custom_license_path.set(file_path)
 
     def create_config_tab(self):
-        tab = self.tab_view.tab("Configurações")
-        self.create_config_form(tab)
-        self.create_save_button(tab)
+        tab = self.tab_view.tab("⚙️ Configurações")
+        tab.grid_columnconfigure(0, weight=1)
 
-    def create_config_form(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="both", expand=True, padx=10, pady=5)
+        author_section = self.create_section(tab, "👤 Informações do Autor", 0)
 
-        fields = [
-            (AUTHOR_NAME_LABEL, self.author_name),
-            (AUTHOR_EMAIL_LABEL, self.author_email),
-            (AUTHOR_URL_LABEL, self.author_url),
-            (COMPANY_PREFIX_LABEL, self.company_prefix),
-            (UNITY_VERSION_LABEL, self.unity_version)
-        ]
+        self.create_entry_row(author_section, "👤 Nome:", self.author_name,
+                             placeholder="Seu Nome Completo", row=1)
+        self.create_entry_row(author_section, "📧 Email:", self.author_email,
+                             placeholder="seu@email.com", row=2)
+        self.create_entry_row(author_section, "🌐 URL do Perfil:", self.author_url,
+                             placeholder="https://github.com/seuusuario", row=3)
 
-        for i, (label, var) in enumerate(fields):
-            row = ctk.CTkFrame(frame)
-            row.pack(fill="x", padx=5, pady=2)
-            ctk.CTkLabel(row, text=label, width=140).pack(side="left")
-            ctk.CTkEntry(row, textvariable=var).pack(side="left", fill="x", expand=True)
+        unity_section = self.create_section(tab, "🎮 Configurações Unity", 1)
 
-    def create_save_button(self, parent):
-        btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(pady=10)
-        ctk.CTkButton(
-            btn_frame,
-            text=SAVE_CONFIG_BUTTON,
-            command=self.save_config,
+        self.create_entry_row(unity_section, "🏢 Prefixo da Empresa:", self.company_prefix,
+                             placeholder="com.suaempresa", row=1)
+
+        unity_frame = ctk.CTkFrame(unity_section, fg_color="transparent")
+        unity_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=3)
+        unity_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(unity_frame, text="🎮 Versão Unity:", width=130, anchor="w").grid(row=0, column=0, sticky="w")
+
+        unity_combo = ctk.CTkComboBox(
+            unity_frame,
+            values=["2021.3", "2022.3", "2023.1", "2023.2", "2023.3", "6000.0"],
+            variable=self.unity_version,
             width=120
-        ).pack()
+        )
+        unity_combo.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+        save_btn = ctk.CTkButton(
+            tab,
+            text="💾 Salvar Configurações",
+            command=self.save_config,
+            height=35
+        )
+        save_btn.grid(row=2, column=0, pady=15)
 
     def create_github_tab(self):
-        tab = self.tab_view.tab("GitHub")
-        self.create_github_form(tab)
-        self.create_verify_button(tab)
-        self.create_instructions(tab)
+        tab = self.tab_view.tab("🐙 GitHub")
+        tab.grid_columnconfigure(0, weight=1)
 
-    def create_github_form(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="x", padx=10, pady=5)
+        cred_section = self.create_section(tab, "🔑 Credenciais GitHub", 0)
 
-        fields = [
-            (GITHUB_USERNAME_LABEL, self.github_username),
-            (GITHUB_TOKEN_LABEL, self.github_token)
+        self.create_entry_row(cred_section, "👤 Usuário:", self.github_username,
+                             placeholder="seuusuario", row=1)
+
+        token_frame = ctk.CTkFrame(cred_section, fg_color="transparent")
+        token_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=3)
+        token_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(token_frame, text="🔑 Token:", width=130, anchor="w").grid(row=0, column=0, sticky="w")
+
+        token_entry_frame = ctk.CTkFrame(token_frame, fg_color="transparent")
+        token_entry_frame.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        token_entry_frame.grid_columnconfigure(0, weight=1)
+
+        self.token_entry = ctk.CTkEntry(
+            token_entry_frame,
+            textvariable=self.github_token,
+            placeholder_text="xxx_xxxxxxxxxxxx",
+            show="*"
+        )
+        self.token_entry.grid(row=0, column=0, sticky="ew")
+
+        verify_btn = ctk.CTkButton(
+            token_entry_frame,
+            text="✅",
+            width=35,
+            command=self.verify_github_credentials
+        )
+        verify_btn.grid(row=0, column=1, padx=(4, 0))
+
+        self.github_status_label = ctk.CTkLabel(
+            cred_section,
+            text="",
+            font=ctk.CTkFont(size=11)
+        )
+        self.github_status_label.grid(row=3, column=0, padx=12, pady=8)
+
+        repo_section = self.create_section(tab, "🚀 Criar Repositório", 1)
+
+        create_repo_cb = ctk.CTkCheckBox(
+            repo_section,
+            text="🚀 Criar repositório no GitHub automaticamente",
+            variable=self.create_repo
+        )
+        create_repo_cb.grid(row=1, column=0, sticky="w", padx=12, pady=8)
+
+        private_cb = ctk.CTkCheckBox(
+            repo_section,
+            text="🔒 Repositório privado",
+            variable=self.repo_private
+        )
+        private_cb.grid(row=2, column=0, sticky="w", padx=30, pady=4)
+
+        self.repo_preview_label = ctk.CTkLabel(
+            repo_section,
+            text="📋 URL será gerada automaticamente",
+            font=ctk.CTkFont(size=11),
+            text_color="gray60"
+        )
+        self.repo_preview_label.grid(row=3, column=0, sticky="w", padx=12, pady=8)
+
+        instructions_section = self.create_section(tab, "📋 Como obter um Token", 2)
+
+        instructions = """1. Acesse github.com/settings/tokens
+2. "Generate new token (classic)"
+3. Nome: "Unity Package Forge" 
+4. Permissões: repo, workflow
+5. Copie o token gerado"""
+
+        instructions_label = ctk.CTkLabel(
+            instructions_section,
+            text=instructions,
+            font=ctk.CTkFont(size=11),
+            justify="left"
+        )
+        instructions_label.grid(row=1, column=0, sticky="w", padx=12, pady=10)
+
+    def create_dependencies_tab(self):
+        tab = self.tab_view.tab("🔧 Dependências")
+        tab.grid_columnconfigure(0, weight=1)
+
+        deps_section = self.create_section(tab, "📦 Dependências Unity", 0)
+
+        main_container = ctk.CTkFrame(deps_section, fg_color="transparent")
+        main_container.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
+        main_container.grid_columnconfigure((0, 1), weight=1)
+
+        left_frame = ctk.CTkFrame(main_container)
+        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        left_frame.grid_columnconfigure(0, weight=1)
+
+        left_title = ctk.CTkLabel(left_frame, text="Dependências Disponíveis", font=ctk.CTkFont(weight="bold"))
+        left_title.grid(row=0, column=0, pady=8)
+
+        self.deps_scroll = ctk.CTkScrollableFrame(left_frame, height=300)
+        self.deps_scroll.grid(row=1, column=0, sticky="ew", padx=8, pady=8)
+        self.deps_scroll.grid_columnconfigure(0, weight=1)
+
+        right_frame = ctk.CTkFrame(main_container)
+        right_frame.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        right_frame.grid_columnconfigure(0, weight=1)
+
+        right_title = ctk.CTkLabel(right_frame, text="Dependências Selecionadas", font=ctk.CTkFont(weight="bold"))
+        right_title.grid(row=0, column=0, pady=8)
+
+        self.selected_deps_text = ctk.CTkTextbox(right_frame, height=300, font=ctk.CTkFont(size=10))
+        self.selected_deps_text.grid(row=1, column=0, sticky="ew", padx=8, pady=8)
+
+        custom_section = self.create_section(tab, "➕ Dependência Personalizada", 1)
+
+        custom_container = ctk.CTkFrame(custom_section, fg_color="transparent")
+        custom_container.grid(row=1, column=0, sticky="ew", padx=12, pady=8)
+        custom_container.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(custom_container, text="Package ID:", width=80).grid(row=0, column=0, sticky="w")
+
+        self.custom_dep_name = StringVar()
+        ctk.CTkEntry(
+            custom_container,
+            textvariable=self.custom_dep_name,
+            placeholder_text="com.exemplo.pacote"
+        ).grid(row=0, column=1, sticky="ew", padx=(4, 8))
+
+        ctk.CTkLabel(custom_container, text="Versão:", width=50).grid(row=0, column=2, sticky="w")
+
+        self.custom_dep_version = StringVar()
+        ctk.CTkEntry(
+            custom_container,
+            textvariable=self.custom_dep_version,
+            placeholder_text="1.0.0",
+            width=80
+        ).grid(row=0, column=3, sticky="ew", padx=(4, 8))
+
+        ctk.CTkLabel(custom_container, text="Nome:", width=50).grid(row=0, column=4, sticky="w")
+
+        self.custom_dep_display_name = StringVar()
+        ctk.CTkEntry(
+            custom_container,
+            textvariable=self.custom_dep_display_name,
+            placeholder_text="Nome Amigável (opcional)",
+            width=120
+        ).grid(row=0, column=5, sticky="ew", padx=(4, 8))
+
+        add_btn = ctk.CTkButton(
+            custom_container,
+            text="➕",
+            width=40,
+            command=self.add_custom_dependency
+        )
+        add_btn.grid(row=0, column=6, padx=(0, 8))
+
+        remove_btn = ctk.CTkButton(
+            custom_container,
+            text="🗑️",
+            width=40,
+            command=self.remove_selected_dependency,
+            fg_color="red",
+            hover_color="darkred"
+        )
+        remove_btn.grid(row=0, column=7)
+
+        self.load_all_dependencies()
+
+    def load_all_dependencies(self):
+        # Salvar estado atual das dependências selecionadas
+        current_selections = {}
+        if hasattr(self, 'dependency_vars'):
+            for package_id, var in self.dependency_vars.items():
+                current_selections[package_id] = var.get()
+
+        self.dependency_vars = {}
+
+        for widget in self.deps_scroll.winfo_children():
+            widget.destroy()
+
+        common_deps = [
+            ("UI Toolkit", "com.unity.ui", "1.0.0"),
+            ("Input System", "com.unity.inputsystem", "1.7.0"),
+            ("Addressables", "com.unity.addressables", "1.21.19"),
+            ("Cinemachine", "com.unity.cinemachine", "2.9.7"),
+            ("Timeline", "com.unity.timeline", "1.7.6"),
+            ("Universal RP", "com.unity.render-pipelines.universal", "14.0.9"),
+            ("TextMeshPro", "com.unity.textmeshpro", "3.0.6"),
+            ("Post Processing", "com.unity.postprocessing", "3.2.2")
         ]
 
-        for label, var in fields:
-            row = ctk.CTkFrame(frame)
-            row.pack(fill="x", padx=5, pady=2)
-            ctk.CTkLabel(row, text=label, width=120).pack(side="left")
-            entry = ctk.CTkEntry(row, textvariable=var)
-            if "Token" in label:
-                entry.configure(show="*")
-            entry.pack(side="left", fill="x", expand=True)
+        custom_deps = self.config_manager.get_custom_dependencies()
 
-    def create_verify_button(self, parent):
-        btn_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_frame.pack(pady=10)
-        ctk.CTkButton(
-            btn_frame,
-            text=GITHUB_VERIFY_BUTTON,
-            command=self.verify_github_credentials,
-            width=120
-        ).pack()
+        all_deps = []
 
-    def create_instructions(self, parent):
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="both", expand=True, padx=10, pady=5)
+        for name, package_id, version in common_deps:
+            custom_info = self.config_manager.get_dependency_info(package_id)
+            if custom_info:
+                version = custom_info["version"]
+                name = custom_info.get("name", name)
+            all_deps.append((name, package_id, version, False))
 
-        textbox = ctk.CTkTextbox(frame, wrap="word")
-        textbox.insert("1.0", GITHUB_INSTRUCTIONS)
-        textbox.configure(state="disabled")
-        textbox.pack(fill="both", expand=True)
+        for package_id, value in custom_deps.items():
+            if not any(dep[1] == package_id for dep in common_deps):
+                if '|' in value:
+                    version, name = value.split('|', 1)
+                else:
+                    version = value
+                    name = package_id.split('.')[-1].title()
+                all_deps.append((name, package_id, version, True))
 
-    def create_debug_tab(self):
-        tab = self.tab_view.tab("Debug")
-        frame = ctk.CTkFrame(tab)
-        frame.pack(fill="both", expand=True, padx=10, pady=5)
+        all_deps.sort(key=lambda x: x[0])
 
-        self.debug_log_text = ctk.CTkTextbox(frame, wrap="word")
-        self.debug_log_text.pack(fill="both", expand=True)
+        for i, (name, package_id, version, is_custom) in enumerate(all_deps):
+            var = BooleanVar()
+            # Restaurar seleção anterior se existir
+            if package_id in current_selections:
+                var.set(current_selections[package_id])
 
-        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        btn_frame.pack(pady=5)
-        ctk.CTkButton(
-            btn_frame,
-            text="Limpar Logs",
-            command=self.clear_logs
-        ).pack(side="right")
+            var.trace('w', lambda *args, pid=package_id, v=version: self.update_dependency_preview())
+            self.dependency_vars[package_id] = var
 
-    def create_about_tab(self):
-        tab = self.tab_view.tab("Sobre")
-        frame = ctk.CTkFrame(tab)
-        frame.pack(fill="both", expand=True, padx=10, pady=5)
+            dep_frame = ctk.CTkFrame(self.deps_scroll, fg_color="transparent")
+            dep_frame.grid(row=i, column=0, sticky="ew", pady=2)
+            dep_frame.grid_columnconfigure(1, weight=1)
 
-        textbox = ctk.CTkTextbox(frame, wrap="word")
-        textbox.insert("1.0", ABOUT_TEXT)
-        textbox.configure(state="disabled")
-        textbox.pack(fill="both", expand=True)
-    
-    def load_ui_values(self):
-        """Carrega valores salvos das configurações"""
-        # Valores da aba de configuração
-        author_name = self.config_manager.get_value(key='author_name', default='')
-        author_email = self.config_manager.get_value(key='author_email', default='')
-        author_url = self.config_manager.get_value(key='author_url', default='')
-        company_prefix = self.config_manager.get_value(key='company_prefix', default='com.companyname')
-        unity_version = self.config_manager.get_value(key='unity_version', default='2021.3')
-        
-        self.author_name.set(author_name if author_name is not None else '')
-        self.author_email.set(author_email if author_email is not None else '')
-        self.author_url.set(author_url if author_url is not None else '')
-        self.company_prefix.set(company_prefix if company_prefix is not None else 'com.companyname')
-        self.unity_version.set(unity_version if unity_version is not None else '2021.3')
-        
-        # Valores de GitHub
-        github_username = self.config_manager.get_value(section='github', key='username', default='')
-        github_token = self.config_manager.get_value(section='github', key='token', default='')
-        
-        self.github_username.set(github_username if github_username is not None else '')
-        self.github_token.set(github_token if github_token is not None else '')
-        
-        # Configuração de tema
-        dark_mode_value = self.config_manager.get_value(key='dark_mode', default='False')
-        is_dark_mode = dark_mode_value.lower() == 'true' if dark_mode_value is not None else False
-        ctk.set_appearance_mode("dark" if is_dark_mode else "light")
-        self.theme_button.configure(text="☀️" if is_dark_mode else "🌙")
-    
-    def select_folder(self):
-        """Abre um diálogo para selecionar a pasta onde o pacote será criado"""
-        folder = filedialog.askdirectory()
-        if folder:
-            self.folder_path.set(folder)
-    
-    def save_config(self):
-        """Salva as configurações atuais"""
-        # Salva os valores dos campos
-        self.config_manager.set_value(key='author_name', value=self.author_name.get())
-        self.config_manager.set_value(key='author_email', value=self.author_email.get())
-        self.config_manager.set_value(key='author_url', value=self.author_url.get())
-        self.config_manager.set_value(key='company_prefix', value=self.company_prefix.get())
-        self.config_manager.set_value(key='unity_version', value=self.unity_version.get())
-        
-        self.config_manager.set_value(section='github', key='username', value=self.github_username.get())
-        self.config_manager.set_value(section='github', key='token', value=self.github_token.get())
-        
-        self.add_log("Configurações salvas com sucesso!")
-    
-    def verify_github_credentials(self):
-        """Verifica se as credenciais do GitHub são válidas"""
-        self.add_log("Verificando credenciais do GitHub...")
-        
-        # Atualiza os valores no gerenciador do GitHub
-        self.github_manager.username = self.github_username.get()
-        self.github_manager.token = self.github_token.get()
-        
-        # Verifica as credenciais
-        result = self.github_manager.check_credentials()
-        # Garante que o resultado seja uma tupla, mesmo que a função antiga seja chamada
-        if isinstance(result, tuple) and len(result) == 2:
-            is_valid, message = result
+            cb = ctk.CTkCheckBox(dep_frame, text="", variable=var, width=20)
+            cb.grid(row=0, column=0, sticky="w")
+
+            text_color = "orange" if is_custom else "gray90"
+            prefix = "🔧 " if is_custom else ""
+
+            info_label = ctk.CTkLabel(
+                dep_frame,
+                text=f"{prefix}{name} (v{version})",
+                font=ctk.CTkFont(size=11),
+                anchor="w",
+                text_color=text_color
+            )
+            info_label.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+        self.update_dependency_preview()
+
+    def add_custom_dependency(self):
+        package_id = self.custom_dep_name.get().strip()
+        version = self.custom_dep_version.get().strip()
+        display_name = self.custom_dep_display_name.get().strip()
+
+        if not package_id or not version:
+            self.add_log("❌ Package ID e versão são obrigatórios")
+            return
+
+        if not self._is_valid_unity_package_id(package_id):
+            self.add_log("❌ Package ID inválido. Deve ser uma dependência Unity válida (ex: com.unity.inputsystem)")
+            return
+
+        if not self._is_valid_version(version):
+            self.add_log("❌ Formato de versão inválido. Use formato x.y.z (ex: 1.0.0)")
+            return
+
+        success = self.config_manager.add_custom_dependency(
+            package_id,
+            version,
+            display_name if display_name else None
+        )
+
+        if success:
+            self.add_log(f"✅ Dependência {package_id} v{version} adicionada/atualizada")
+
+            self.custom_dep_name.set("")
+            self.custom_dep_version.set("")
+            self.custom_dep_display_name.set("")
+
+            self.load_all_dependencies()
         else:
-            # Compatibilidade com versão antiga que retornava apenas bool
-            is_valid = result
-            message = "Sucesso!" if is_valid else "Falha na autenticação"
-        
-        if is_valid:
-            self.add_log(f"Credenciais válidas! {message}")
+            self.add_log("❌ Erro ao adicionar dependência")
+
+    def _is_valid_unity_package_id(self, package_id):
+        import re
+
+        pattern = r'^(com\.unity\.|com\.[\w-]+\.|org\.[\w-]+\.)[a-z0-9\-\.]+$'
+
+        if not re.match(pattern, package_id):
+            return False
+
+        valid_prefixes = [
+            'com.unity.',           # Pacotes oficiais Unity
+            'com.microsoft.',       # Microsoft packages (Mixed Reality, etc)
+            'com.google.',          # Google packages (Firebase, etc)
+            'com.facebook.',        # Facebook packages
+            'com.valve.',           # Valve packages (OpenVR, etc)
+            'com.oculus.',          # Oculus packages
+            'com.htc.',             # HTC packages
+            'com.autodesk.',        # Autodesk packages
+            'com.adobe.',           # Adobe packages
+            'org.nuget.',           # NuGet packages
+        ]
+
+        return any(package_id.startswith(prefix) for prefix in valid_prefixes)
+
+    def _is_valid_version(self, version):
+        import re
+        pattern = r'^\d+\.\d+\.\d+(-[\w\.\-]+)?$'
+        return bool(re.match(pattern, version))
+
+    def remove_selected_dependency(self):
+        selected_deps = []
+        custom_deps = self.config_manager.get_custom_dependencies()
+
+        for package_id, var in self.dependency_vars.items():
+            if var.get() and package_id in custom_deps:
+                selected_deps.append(package_id)
+
+        if not selected_deps:
+            self.add_log("⚠️ Selecione uma dependência personalizada (🔧) para remover")
+            return
+
+        package_id = selected_deps[0]
+        if self.config_manager.remove_custom_dependency(package_id):
+            self.add_log(f"🗑️ Dependência {package_id} removida")
+            self.load_all_dependencies()
         else:
-            self.add_log(f"Erro ao verificar credenciais: {message}")
-    
-    def add_log(self, message):
-        """Adiciona uma mensagem ao log de debug
-        
-        Args:
-            message: A mensagem a ser adicionada
-        """
-        self.debug_log_text.configure(state="normal")
-        self.debug_log_text.insert("end", f"{message}\n")
-        self.debug_log_text.see("end")
-        self.debug_log_text.configure(state="disabled")
-        print(message)  # Também mostra no console para debug
-    
-    def clear_logs(self):
-        """Limpa a área de logs"""
-        self.debug_log_text.configure(state="normal")
-        self.debug_log_text.delete("1.0", "end")
-        self.debug_log_text.configure(state="disabled")
-    
-    def update_progress(self, value, message=""):
-        """Atualiza a barra de progresso e o texto de status
-        
-        Args:
-            value: O valor do progresso (0.0 a 1.0)
-            message: Mensagem opcional para mostrar
-        """
-        self.progress_bar.set(value)
-        
-        if message:
-            self.progress_label.configure(text=message)
-            self.add_log(message)
+            self.add_log("❌ Erro ao remover dependência")
+
+    def update_dependency_preview(self):
+        if hasattr(self, 'selected_deps_text'):
+            selected = []
+            for package_id, var in self.dependency_vars.items():
+                if var.get():
+                    # Verificar se é uma dependência Unity válida antes de adicionar
+                    if self._is_valid_unity_package_id(package_id):
+                        custom_info = self.config_manager.get_dependency_info(package_id)
+                        if custom_info:
+                            version = custom_info["version"]
+                        else:
+                            version = "1.0.0"
+                            for name, deps in UNITY_DEPENDENCIES.items():
+                                if package_id in deps:
+                                    version = deps[package_id]
+                                    break
+
+                        selected.append(f'"{package_id}": "{version}"')
+
+            if selected:
+                preview_text = "{\n  " + ",\n  ".join(selected) + "\n}"
+            else:
+                preview_text = "Nenhuma dependência selecionada"
+
+            self.selected_deps_text.delete("1.0", "end")
+            self.selected_deps_text.insert("1.0", preview_text)
 
     def generate_package(self):
-     """Gera o pacote do Unity com as configurações atuais"""
-     # Validação básica
-     if not self.validate_form():
-         return
+        def run_generation():
+            try:
+                if not self.display_name.get().strip():
+                    self.add_log("❌ Nome de exibição é obrigatório")
+                    return
 
-     # Loga início do processo
-     self.add_log(f"Iniciando geração do pacote: {self.package_name.get()}")
-     self.update_progress(0.0, "Iniciando geração...")
+                if not self.folder_path.get().strip():
+                    self.add_log("❌ Pasta de destino é obrigatória")
+                    return
 
-     try:
-         # Define a pasta base
-         base_path = self.folder_path.get()
-         package_name = self.package_name.get()
-         display_name = self.display_name.get()
-         description = self.description.get()
+                self.generate_btn.configure(state="disabled", text="⏳ Gerando...")
 
-         # Cria a estrutura do pacote (agora retorna o caminho da pasta do pacote)
-         package_folder = self.package_generator.create_package_structure(
-             base_path=base_path,
-             name=package_name,
-             display_name=display_name,
-             description=description,
-             create_samples=self.create_samples.get(),
-             create_runtime=self.create_runtime.get(),
-             create_editor=self.create_editor.get(),
-             create_tests=self.create_tests.get(),
-             create_github=self.create_github.get(),
-             create_license=self.license_type.get()
-         )
+                selected_deps = {}
+                for package_id, var in self.dependency_vars.items():
+                    if var.get() and self._is_valid_unity_package_id(package_id):
+                        custom_info = self.config_manager.get_dependency_info(package_id)
+                        if custom_info:
+                            version = custom_info["version"]
+                        else:
+                            version = "1.0.0"
+                            for name, deps in UNITY_DEPENDENCIES.items():
+                                if package_id in deps:
+                                    version = deps[package_id]
+                                    break
+                        selected_deps[package_id] = version
 
-         if not package_folder:
-             self.add_log("❌ Falha ao criar estrutura do pacote.")
-             self.update_progress(0, "Erro ao gerar pacote")
-             return
+                package_path = self.package_generator.create_package_structure(
+                    base_path=self.folder_path.get(),
+                    name=self.display_name.get(),
+                    display_name=self.display_name.get(),
+                    description=self.description.get(),
+                    version=self.version.get(),
+                    create_samples=self.create_samples.get(),
+                    create_runtime=self.create_runtime.get(),
+                    create_editor=self.create_editor.get(),
+                    create_tests=self.create_tests.get(),
+                    create_github=self.create_github.get(),
+                    license_type=self.license_type.get(),
+                    unity_dependencies=selected_deps if selected_deps else None
+                )
 
-         self.update_progress(0.8, "Pacote criado com sucesso!")
+                if self.create_repo.get():
+                    if self.github_manager.is_configured():
+                        result = self.github_manager.setup_repository_with_semantic_release(
+                            package_path=package_path,
+                            display_name=self.display_name.get(),
+                            description=self.description.get(),
+                            private=self.repo_private.get(),
+                            initial_version=self.version.get()
+                        )
 
-         # Se solicitado, inicializa o repositório GitHub
-         if self.create_repo.get() and self.github_manager.is_configured():
-             self.add_log("Criando repositório no GitHub...")
+                        if "success" in result:
+                            self.add_log(f"✅ {result['message']}")
+                            repo_url = self.github_manager.get_repository_url(self.display_name.get())
+                            self.add_log(f"📋 URL para Unity: {repo_url}")
+                        else:
+                            self.add_log(f"❌ Erro no GitHub: {result['error']}")
+                    else:
+                        self.add_log("⚠️ Credenciais GitHub não configuradas - repositório não criado")
 
-             # Obtém o nome completo do pacote para o repositório
-             full_package_name = self.package_generator.get_full_package_name(package_name)
+                self.add_log("🎉 Pacote gerado com sucesso!")
+                self.update_progress(100, "Concluído!")
 
-             # Método aprimorado de criação e configuração do repositório
-             success, repo_url = self.github_manager.create_and_setup_repository(
-                 package_folder=package_folder,
-                 package_name=full_package_name,
-                 package_description=description,
-                 is_private=self.repo_private.get(),
-                 status_callback=self.handle_setup_progress
-             )
+                if messagebox.askyesno("Sucesso", "✅ Pacote criado com sucesso!\nDeseja abrir a pasta?"):
+                    open_folder(package_path)
 
-             if success:
-                 self.add_log(f"✅ Repositório em criação: {repo_url}")
-                 # A navegação para o repositório será feita pelo callback quando o setup estiver completo
-             else:
-                 self.add_log("❌ Erro ao criar repositório no GitHub")
+            except Exception as e:
+                self.add_log(f"❌ Erro: {str(e)}")
+            finally:
+                self.generate_btn.configure(state="disabled", text="🚀 Gerar Pacote Unity")
+                self.update_progress(0)
 
-         self.update_progress(1.0, "Pacote gerado com sucesso!")
-     except Exception as e:
-         self.add_log(f"❌ Erro ao gerar pacote: {str(e)}")
-         self.update_progress(0, "Erro ao gerar pacote")
-     
-    def handle_setup_progress(self, success, message, progress=None):
-        """Manipula o progresso da configuração do git
-        
-        Args:
-            success: Se a operação foi bem-sucedida
-            message: A mensagem de status
-            progress: O valor de progresso opcional
-        """
-        if success:
-            self.add_log(message)
-            if progress is not None:
-                # Ajusta o progresso para a faixa de 80% a 100%
-                adjusted_progress = 0.8 + (progress * 0.2)
-                self.update_progress(adjusted_progress, message)
+        threading.Thread(target=run_generation, daemon=True).start()
+
+    def update_progress(self, value, message=""):
+        self.progress_var.set(value / 100)
+        if message:
+            self.status_label.configure(text=message)
+
+    def add_log(self, message):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] {message}\n"
+        self.log_text.insert("end", log_entry)
+        self.log_text.see("end")
+
+    def clear_log(self):
+        self.log_text.delete("1.0", "end")
+
+    def save_log(self):
+        content = self.log_text.get("1.0", "end")
+        if content.strip():
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".log",
+                filetypes=[("Log files", "*.log"), ("Text files", "*.txt")]
+            )
+            if filename:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                self.add_log(f"💾 Log salvo em: {filename}")
+
+    def test_connection(self):
+        self.add_log("🧪 Testando conexão com GitHub...")
+        self.verify_github_credentials()
+
+    def open_url(self, url):
+        import webbrowser
+        webbrowser.open(url)
+
+    def select_folder(self):
+        folder = filedialog.askdirectory(
+            title="Selecionar pasta de destino",
+            initialdir=self.config_manager.get_value(key='last_directory', default=os.path.expanduser('~'))
+        )
+        if folder:
+            self.folder_path.set(folder)
+            self.config_manager.set_value(key='last_directory', value=folder)
+
+    def verify_github_credentials(self):
+        def verify():
+            success, message = self.github_manager.check_credentials()
+            self.github_status_label.configure(
+                text=message,
+                text_color="green" if success else "red"
+            )
+
+        threading.Thread(target=verify, daemon=True).start()
+
+    def save_config(self):
+        configs = {
+            'author_name': self.author_name.get(),
+            'author_email': self.author_email.get(),
+            'author_url': self.author_url.get(),
+            'company_prefix': self.company_prefix.get(),
+            'unity_version': self.unity_version.get()
+        }
+
+        for key, value in configs.items():
+            self.config_manager.set_value(key=key, value=value)
+
+        self.config_manager.set_value(section='github', key='username', value=self.github_username.get())
+        self.config_manager.set_value(section='github', key='token', value=self.github_token.get())
+
+        self.github_manager.username = self.github_username.get()
+        self.github_manager.token = self.github_token.get()
+
+        messagebox.showinfo("Sucesso", "✅ Configurações salvas com sucesso!")
+
+    def create_debug_tab(self):
+        tab = self.tab_view.tab("🐛 Debug")
+        tab.grid_columnconfigure(0, weight=1)
+
+        log_section = self.create_section(tab, "📝 Log de Atividades", 0)
+
+        self.log_text = ctk.CTkTextbox(
+            log_section,
+            height=350,
+            font=ctk.CTkFont(family="Consolas", size=10)
+        )
+        self.log_text.grid(row=1, column=0, sticky="ew", padx=12, pady=10)
+
+        control_frame = ctk.CTkFrame(log_section, fg_color="transparent")
+        control_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
+        control_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        clear_btn = ctk.CTkButton(
+            control_frame,
+            text="🗑️ Limpar",
+            command=self.clear_log,
+            height=30
+        )
+        clear_btn.grid(row=0, column=0, padx=4)
+
+        save_log_btn = ctk.CTkButton(
+            control_frame,
+            text="💾 Salvar",
+            command=self.save_log,
+            height=30
+        )
+        save_log_btn.grid(row=0, column=1, padx=4)
+
+        test_btn = ctk.CTkButton(
+            control_frame,
+            text="🧪 Testar GitHub",
+            command=self.test_connection,
+            height=30
+        )
+        test_btn.grid(row=0, column=2, padx=4)
+
+    def create_about_tab(self):
+        tab = self.tab_view.tab("ℹ️ Sobre")
+        tab.grid_columnconfigure(0, weight=1)
+
+        about_section = self.create_section(tab, f"🚀 Unity Package Forge v{get_current_version()}", 0)
+
+        info_text = f"""Unity Package Forge é uma ferramenta profissional para criar pacotes Unity
+seguindo as melhores práticas e padrões da indústria.
+
+✨ Funcionalidades:
+• Geração automática de estrutura de pacotes
+• Integração completa com GitHub
+• Assembly Definitions com namespace correto
+• Templates de documentação profissionais
+• Semantic Release configurado
+• Build automático multiplataforma
+
+🔧 Versão: {get_current_version()}
+📅 Atualizado: {datetime.now().strftime('%d/%m/%Y')}
+👨‍💻 Desenvolvido por: Nathan da Silva Miranda
+
+🌐 GitHub: github.com/Natteens/UnityPackageForge"""
+
+        info_label = ctk.CTkLabel(
+            about_section,
+            text=info_text,
+            font=ctk.CTkFont(size=11),
+            justify="left"
+        )
+        info_label.grid(row=1, column=0, sticky="w", padx=15, pady=15)
+
+        links_section = self.create_section(tab, "🔗 Links Úteis", 1)
+
+        links_frame = ctk.CTkFrame(links_section, fg_color="transparent")
+        links_frame.grid(row=1, column=0, padx=12, pady=10)
+        links_frame.grid_columnconfigure((0, 1), weight=1)
+
+        github_btn = ctk.CTkButton(
+            links_frame,
+            text="🐙 GitHub",
+            command=lambda: self.open_url("https://github.com/Natteens/UnityPackageForge"),
+            height=30,
+            width=120
+        )
+        github_btn.grid(row=0, column=0, padx=4)
+
+        unity_btn = ctk.CTkButton(
+            links_frame,
+            text="🎮 Unity Docs",
+            command=lambda: self.open_url("https://docs.unity3d.com/Manual/upm-ui.html"),
+            height=30,
+            width=120
+        )
+        unity_btn.grid(row=0, column=1, padx=4)
+
+    def load_ui_values(self):
+        self.author_name.set(self.config_manager.get_value(key='author_name', default=''))
+        self.author_email.set(self.config_manager.get_value(key='author_email', default=''))
+        self.author_url.set(self.config_manager.get_value(key='author_url', default=''))
+        self.company_prefix.set(self.config_manager.get_value(key='company_prefix', default='com.company'))
+        self.unity_version.set(self.config_manager.get_value(key='unity_version', default='2021.3'))
+
+        self.github_username.set(self.config_manager.get_value(section='github', key='username', default=''))
+        self.github_token.set(self.config_manager.get_value(section='github', key='token', default=''))
+
+        last_dir = self.config_manager.get_value(key='last_directory', default='')
+        if last_dir and os.path.exists(last_dir):
+            self.folder_path.set(last_dir)
         else:
-            self.add_log(f"Erro: {message}")
-    
-    def validate_form(self):
-        """Valida os campos do formulário antes de gerar o pacote
-        
-        Returns:
-            bool: True se o formulário é válido, False caso contrário
-        """
-        # Valida nome do pacote
-        package_name = self.package_name.get().strip()
-        if not package_name:
-            self.add_log("Erro: Nome do pacote é obrigatório")
-            return False
-        
-        if not validate_package_name(package_name):
-            self.add_log("Erro: Nome do pacote inválido. Use apenas letras minúsculas, números e ponto.")
-            return False
-        
-        # Valida nome de exibição
-        display_name = self.display_name.get().strip()
-        if not display_name:
-            self.add_log("Erro: Nome de exibição é obrigatório")
-            return False
-        
-        # Valida descrição
-        description = self.description.get().strip()
-        if not description:
-            self.add_log("Erro: Descrição é obrigatória")
-            return False
-        
-        # Valida pasta
-        folder_path = self.folder_path.get().strip()
-        if not folder_path:
-            self.add_log("Erro: Selecione uma pasta para o pacote")
-            return False
-        
-        if not os.path.isdir(folder_path):
-            self.add_log(f"Erro: A pasta '{folder_path}' não existe ou não é um diretório")
-            return False
-        
-        # Valida configurações de GitHub
-        if self.create_repo.get() and not self.github_manager.is_configured():
-            self.add_log("Erro: Para criar um repositório no GitHub, configure suas credenciais na aba GitHub")
-            return False
-        
-        return True
+            self.folder_path.set('')
+
+        ctk.set_appearance_mode("dark")
+
+    def setup_bindings(self):
+        self.main_frame.bind("<Enter>", self._bind_mousewheel)
+        self.main_frame.bind("<Leave>", self._unbind_mousewheel)
+
+    def _bind_mousewheel(self, event):
+        self.main_frame.bind_all("<MouseWheel>", self._on_mousewheel)
+
+    def _unbind_mousewheel(self, event):
+        self.main_frame.unbind_all("<MouseWheel>")
+
+    def _on_mousewheel(self, event):
+        self.main_frame._parent_canvas.yview_scroll(int(-1*(event.delta/120)), "units")

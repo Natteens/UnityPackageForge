@@ -1,0 +1,34 @@
+import re
+import os
+
+def get_current_version():
+    try:
+        changelog_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'CHANGELOG.md')
+        if os.path.exists(changelog_path):
+            with open(changelog_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                match = re.search(r'\[(\d+\.\d+\.\d+)\]', content)
+                if match:
+                    return match.group(1)
+    except Exception as e:
+        print(f"Erro ao extrair versão: {e}")
+    return "1.0.0"
+
+def sanitize_name_for_repo(display_name):
+    sanitized = display_name.lower().replace(' ', '-')
+    sanitized = re.sub(r'[^a-z0-9\-]', '', sanitized)
+    sanitized = re.sub(r'-+', '-', sanitized)
+    sanitized = sanitized.strip('-')
+    return sanitized
+
+def extract_package_name_from_full_name(full_name):
+    if '.' in full_name:
+        parts = full_name.split('.')
+        return parts[-1]
+    return full_name
+
+def get_namespace_from_display_name(display_name):
+    namespace = re.sub(r'[^a-zA-Z0-9]', '', display_name)
+    if namespace and not namespace[0].isalpha():
+        namespace = 'Package' + namespace
+    return namespace or 'PackageNamespace'

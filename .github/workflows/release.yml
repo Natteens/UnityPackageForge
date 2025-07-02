@@ -1,4 +1,4 @@
-name: Release
+name: Release and Build
 
 on:
   push:
@@ -6,86 +6,118 @@ on:
   pull_request:
     branches: [ main ]
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-
 jobs:
-  build-and-release:
-    runs-on: windows-latest
+  release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configurar Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
 
-      - name: Instalar dependências Python
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+    - name: Install dependencies
+      run: npm ci
 
-      - name: Criar executável com PyInstaller
-        run: |
-          mkdir -p dist
-          pyinstaller --onefile --noconsole --icon=ui/icon.ico main.py --name UnityPackageForge
+    - name: Release
+      id: release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        npx semantic-release
+        echo "released=true" >> $GITHUB_OUTPUT
 
-      - name: Gerar Certificado Autoassinado
-        shell: pwsh
-        run: |
-          $cert = New-SelfSignedCertificate -Type CodeSigning -Subject "CN=UnityPackageForge" -CertStoreLocation "Cert:\CurrentUser\My" -KeyExportPolicy Exportable -NotAfter (Get-Date).AddYears(1)
-          $password = ConvertTo-SecureString -String "R@nd0mÇçP@ss789!" -Force -AsPlainText
-          Export-PfxCertificate -Cert $cert -FilePath ".\certificate.pfx" -Password $password
+  build-executables:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            ext: .exe
+            build_cmd: pyinstaller --onefile --windowed --name "unity-package-forge-windows" --icon="ui/icon.ico" main.py
+          - os: ubuntu-latest
+            name: linux
+            ext: ''
+            build_cmd: pyinstaller --onefile --name "unity-package-forge-linux" main.py
+          - os: macos-latest
+            name: macos
+            ext: ''
+            build_cmd: pyinstaller --onefile --windowed --name "unity-package-forge-macos" main.py
 
-      - name: Assinar o executável
-        shell: pwsh
-        run: |
-          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\signtool.exe"
-          $password = "R@nd0mÇçP@ss789!"
-          $executable = "dist\UnityPackageForge.exe"
-          &$signtool sign /f certificate.pfx /p $password /fd sha256 /tr http://timestamp.digicert.com /td sha256 /a $executable
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Verificar arquivos na pasta dist
-        run: dir dist
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-          cache: 'npm'
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
 
-      - name: Instalar dependências do semantic-release
-        run: |
-          npm install --save-dev semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
 
-      - name: Criar arquivo de configuração do semantic-release
-        run: |
-          @"
-          {
-            "branches": ["main"],
-            "plugins": [
-              "@semantic-release/commit-analyzer",
-              "@semantic-release/release-notes-generator",
-              "@semantic-release/changelog",
-              ["@semantic-release/github", {
-                "assets": [
-                  {"path": "dist/UnityPackageForge.exe", "label": "UnityPackageForge.exe"}
-                ]
-              }],
-              "@semantic-release/git"
-            ]
-          }
-          "@ | Out-File -FilePath .releaserc.json -Encoding UTF8
+    - name: Build executable
+      run: ${{ matrix.build_cmd }}
 
-      - name: Semantic Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+    - name: Upload executable to release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/unity-package-forge-${{ matrix.name }}${{ matrix.ext }}
+        tag_name: ${{ needs.release.outputs.version }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: Test imports
+      run: |
+        python -c "import customtkinter; import requests; print('Dependencies OK')"
+        python -c "from utils.version_utils import get_current_version; print(f'Version: {get_current_version()}')"
