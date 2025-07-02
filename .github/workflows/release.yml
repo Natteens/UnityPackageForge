@@ -107,6 +107,23 @@ jobs:
     - name: Build executable
       run: ${{ matrix.build_cmd }}
 
+    # Code signing preparation (Windows only)
+    - name: Code Sign (Windows)
+      if: matrix.os == 'windows-latest' && env.WINDOWS_CERTIFICATE != ''
+      shell: powershell
+      run: |
+        # This step is prepared for future code signing
+        # To enable, add WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD secrets
+        Write-Host "Code signing preparation complete"
+        # Uncomment when certificate is available:
+        # $cert = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+        # [System.IO.File]::WriteAllBytes("cert.p12", $cert)
+        # & 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool.exe' sign /f cert.p12 /p $env:WINDOWS_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\unity-package-forge-windows.exe"
+        # Remove-Item cert.p12
+      env:
+        WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
     - name: Upload executable to release
       if: needs.release.outputs.released == 'true'
       uses: softprops/action-gh-release@v1

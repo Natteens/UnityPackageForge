@@ -21,7 +21,14 @@ def install_dependencies():
 
     if missing_packages:
         print(f"Instalando dependências: {', '.join(missing_packages)}")
-        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
+        
+        # Hide CMD window on Windows
+        import sys
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages, **kwargs)
 
 def start_gui():
     ctk.set_appearance_mode(APP_APPEARANCE_MODE)

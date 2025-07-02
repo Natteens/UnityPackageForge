@@ -830,7 +830,23 @@ class PackageGeneratorGUI:
 
     def test_connection(self):
         self.add_log("🧪 Testando conexão com GitHub...")
-        self.verify_github_credentials()
+        self.verify_github_credentials_direct()
+
+    def verify_github_credentials_direct(self):
+        """Verify GitHub credentials using current field values (without saving)"""
+        def verify():
+            # Create a temporary GitHub manager with current field values
+            temp_github_manager = GitHubManager(self.config_manager)
+            temp_github_manager.username = self.github_username.get()
+            temp_github_manager.token = self.github_token.get()
+            
+            success, message = temp_github_manager.check_credentials()
+            self.github_status_label.configure(
+                text=message,
+                text_color="green" if success else "red"
+            )
+
+        threading.Thread(target=verify, daemon=True).start()
 
     def open_url(self, url):
         import webbrowser
@@ -992,6 +1008,15 @@ seguindo as melhores práticas e padrões da indústria.
     def setup_bindings(self):
         self.main_frame.bind("<Enter>", self._bind_mousewheel)
         self.main_frame.bind("<Leave>", self._unbind_mousewheel)
+        
+        # Auto-save bindings for configuration fields
+        self.author_name.trace('w', self._auto_save_config)
+        self.author_email.trace('w', self._auto_save_config)
+        self.author_url.trace('w', self._auto_save_config)
+        self.company_prefix.trace('w', self._auto_save_config)
+        self.unity_version.trace('w', self._auto_save_config)
+        self.github_username.trace('w', self._auto_save_github)
+        self.github_token.trace('w', self._auto_save_github)
 
     def _bind_mousewheel(self, event):
         self.main_frame.bind_all("<MouseWheel>", self._on_mousewheel)
@@ -1001,3 +1026,39 @@ seguindo as melhores práticas e padrões da indústria.
 
     def _on_mousewheel(self, event):
         self.main_frame._parent_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    def _auto_save_config(self, *args):
+        """Auto-save configuration fields when they change"""
+        # Small delay to avoid saving on every keystroke
+        if hasattr(self, '_auto_save_timer'):
+            self.root.after_cancel(self._auto_save_timer)
+        self._auto_save_timer = self.root.after(1000, self._do_auto_save_config)  # 1 second delay
+    
+    def _auto_save_github(self, *args):
+        """Auto-save GitHub fields when they change"""
+        # Small delay to avoid saving on every keystroke
+        if hasattr(self, '_auto_save_github_timer'):
+            self.root.after_cancel(self._auto_save_github_timer)
+        self._auto_save_github_timer = self.root.after(1000, self._do_auto_save_github)  # 1 second delay
+    
+    def _do_auto_save_config(self):
+        """Perform the actual auto-save of configuration"""
+        configs = {
+            'author_name': self.author_name.get(),
+            'author_email': self.author_email.get(),
+            'author_url': self.author_url.get(),
+            'company_prefix': self.company_prefix.get(),
+            'unity_version': self.unity_version.get()
+        }
+
+        for key, value in configs.items():
+            self.config_manager.set_value(key=key, value=value)
+    
+    def _do_auto_save_github(self):
+        """Perform the actual auto-save of GitHub configuration"""
+        self.config_manager.set_value(section='github', key='username', value=self.github_username.get())
+        self.config_manager.set_value(section='github', key='token', value=self.github_token.get())
+        
+        # Update GitHub manager with current values
+        self.github_manager.username = self.github_username.get()
+        self.github_manager.token = self.github_token.get()
