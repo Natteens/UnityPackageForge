@@ -392,7 +392,7 @@ UNITY_DEPENDENCIES = {
 }
 
 # GitHub Workflow para Semantic Release
-RELEASE_WORKFLOW = """name: Release
+RELEASE_WORKFLOW = """name: Release and Build
 
 on:
   push:
@@ -407,6 +407,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -421,10 +425,93 @@ jobs:
       - name: Install Semantic Release
         run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github @semantic-release/commit-analyzer @semantic-release/release-notes-generator
 
+      - name: Get tag before release
+        id: tag_before
+        run: |
+          TAG_BEFORE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "tag_before=${{TAG_BEFORE}}" >> $GITHUB_OUTPUT
+          echo "Tag before release: ${{TAG_BEFORE}}"
+
       - name: Release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release
+        run: |
+          semantic-release
+          
+          # Get tag after release
+          TAG_AFTER=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          TAG_BEFORE="${{ steps.tag_before.outputs.tag_before }}"
+          
+          echo "Tag before: ${{TAG_BEFORE}}"
+          echo "Tag after: ${{TAG_AFTER}}"
+          
+          # Check if a new tag was created
+          if [ "${{TAG_AFTER}}" != "${{TAG_BEFORE}}" ] && [ -n "${{TAG_AFTER}}" ]; then
+            echo "released=true" >> $GITHUB_OUTPUT
+            echo "tag_name=${{TAG_AFTER}}" >> $GITHUB_OUTPUT
+            echo "✅ New release created: ${{TAG_AFTER}}"
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+            echo "tag_name=" >> $GITHUB_OUTPUT
+            echo "ℹ️ No release created - no qualifying commits"
+          fi
+
+  build-executables:
+    needs: release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            ext: .exe
+          - os: ubuntu-latest
+            name: linux
+            ext: ''
+          - os: macos-latest
+            name: macos
+            ext: ''
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+
+    - name: Build executable
+      run: pyinstaller --onefile --name "package-${{ matrix.name }}" main.py
+
+    - name: Upload executable to release
+      if: needs.release.outputs.released == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/package-${{ matrix.name }}${{ matrix.ext }}
+        tag_name: ${{ needs.release.outputs.tag_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload executable as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: package-${{ matrix.name }}
+        path: dist/package-${{ matrix.name }}${{ matrix.ext }}
 """
 
 # Configuração do Semantic Release

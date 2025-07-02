@@ -12,8 +12,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     outputs:
       released: ${{ steps.release.outputs.released }}
-      version: ${{ steps.release.outputs.version }}
-      latest_tag: ${{ steps.get_tag.outputs.tag }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
 
     steps:
     - name: Checkout
@@ -31,30 +30,44 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Get tag before release
+      id: tag_before
+      run: |
+        TAG_BEFORE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        echo "tag_before=${TAG_BEFORE}" >> $GITHUB_OUTPUT
+        echo "Tag before release: ${TAG_BEFORE}"
+
     - name: Release
       id: release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         npx semantic-release
-        if [ $? -eq 0 ]; then
+        
+        # Get tag after release
+        TAG_AFTER=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        TAG_BEFORE="${{ steps.tag_before.outputs.tag_before }}"
+        
+        echo "Tag before: ${TAG_BEFORE}"
+        echo "Tag after: ${TAG_AFTER}"
+        
+        # Check if a new tag was created
+        if [ "${TAG_AFTER}" != "${TAG_BEFORE}" ] && [ -n "${TAG_AFTER}" ]; then
           echo "released=true" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_AFTER}" >> $GITHUB_OUTPUT
+          echo "✅ New release created: ${TAG_AFTER}"
         else
           echo "released=false" >> $GITHUB_OUTPUT
+          echo "tag_name=" >> $GITHUB_OUTPUT
+          echo "ℹ️ No release created - no qualifying commits"
         fi
-
-    - name: Get latest tag
-      id: get_tag
-      run: |
-        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
-        echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
-        echo "Latest tag: ${LATEST_TAG}"
 
   build-executables:
     needs: release
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -99,7 +112,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: dist/unity-package-forge-${{ matrix.name }}${{ matrix.ext }}
-        tag_name: ${{ needs.release.outputs.version }}
+        tag_name: ${{ needs.release.outputs.tag_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,6 +125,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.8', '3.9', '3.10', '3.11']
