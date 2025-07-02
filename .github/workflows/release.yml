@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -73,15 +78,12 @@ jobs:
           - os: windows-latest
             name: windows
             ext: .exe
-            build_cmd: pyinstaller --onefile --windowed --name "unity-package-forge-windows" --icon="ui/icon.ico" main.py
           - os: ubuntu-latest
             name: linux
             ext: ''
-            build_cmd: pyinstaller --onefile --name "unity-package-forge-linux" main.py
           - os: macos-latest
             name: macos
             ext: ''
-            build_cmd: pyinstaller --onefile --windowed --name "unity-package-forge-macos" main.py
 
     steps:
     - name: Checkout
@@ -101,11 +103,42 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
         pip install -r requirements.txt
 
-    - name: Build executable
-      run: ${{ matrix.build_cmd }}
+    - name: Verify dependencies
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        from utils.resource_utils import get_resource_path
+        from utils.crypto_utils import get_crypto_instance
+        print('✅ Core dependencies verified')
+        "
+
+    - name: Build executable with spec file
+      run: |
+        pyinstaller unity_package_forge.spec
+
+    - name: Verify executable was created
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          if [ -f "dist/unity-package-forge.exe" ]; then
+            echo "✅ Windows executable created successfully"
+            ls -la dist/
+          else
+            echo "❌ Windows executable not found"
+            exit 1
+          fi
+        else
+          if [ -f "dist/unity-package-forge" ]; then
+            echo "✅ Unix executable created successfully"
+            ls -la dist/
+          else
+            echo "❌ Unix executable not found"
+            exit 1
+          fi
+        fi
 
     # Code signing preparation (Windows only)
     - name: Code Sign (Windows)
@@ -118,7 +151,7 @@ jobs:
         # Uncomment when certificate is available:
         # $cert = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
         # [System.IO.File]::WriteAllBytes("cert.p12", $cert)
-        # & 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool.exe' sign /f cert.p12 /p $env:WINDOWS_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\unity-package-forge-windows.exe"
+        # & 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool.exe' sign /f cert.p12 /p $env:WINDOWS_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 "dist\unity-package-forge.exe"
         # Remove-Item cert.p12
       env:
         WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -128,7 +161,7 @@ jobs:
       if: needs.release.outputs.released == 'true'
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/unity-package-forge-${{ matrix.name }}${{ matrix.ext }}
+        files: dist/unity-package-forge${{ matrix.ext }}
         tag_name: ${{ needs.release.outputs.tag_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,7 +170,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: unity-package-forge-${{ matrix.name }}
-        path: dist/unity-package-forge-${{ matrix.name }}${{ matrix.ext }}
+        path: dist/unity-package-forge${{ matrix.ext }}
+        retention-days: 30
 
   test:
     runs-on: ${{ matrix.os }}
@@ -167,7 +201,15 @@ jobs:
         pip install -r requirements.txt
         pip install pytest
 
-    - name: Test imports
+    - name: Test core imports and utilities
       run: |
-        python -c "import customtkinter; import requests; print('Dependencies OK')"
-        python -c "from utils.version_utils import get_current_version; print(f'Version: {get_current_version()}')"
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        from utils.resource_utils import get_resource_path, is_executable
+        from utils.crypto_utils import get_crypto_instance
+        from utils.version_utils import get_current_version
+        print('✅ Core utilities work')
+        print(f'Version: {get_current_version()}')
+        print(f'Is executable: {is_executable()}')
+        "

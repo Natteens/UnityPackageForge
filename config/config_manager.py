@@ -1,10 +1,12 @@
 import configparser
 import os
 from utils.crypto_utils import get_crypto_instance
+from utils.resource_utils import ensure_config_file_exists, get_config_directory
 
 class ConfigManager:
     def __init__(self, config_file='config.ini'):
-        self.config_file = config_file
+        self.config_file_name = config_file
+        self.config_file = ensure_config_file_exists(config_file)
         self.config = configparser.ConfigParser()
         self.crypto = get_crypto_instance()
         self.sensitive_keys = {'token'}
