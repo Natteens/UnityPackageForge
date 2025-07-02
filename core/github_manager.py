@@ -3,6 +3,7 @@ import subprocess
 import threading
 import requests
 import webbrowser
+import sys
 from utils.version_utils import sanitize_name_for_repo
 
 class GitHubManager:
@@ -10,6 +11,13 @@ class GitHubManager:
         self.config = config_manager
         self.token = self.config.get_value(section='github', key='token', default='')
         self.username = self.config.get_value(section='github', key='username', default='')
+    
+    def _get_subprocess_kwargs(self):
+        """Get subprocess kwargs to hide CMD window on Windows"""
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        return kwargs
 
     def is_configured(self):
         return bool(self.token and self.username)
@@ -115,29 +123,32 @@ class GitHubManager:
             repo_url = f"https://github.com/{self.username}/{repo_name}.git"
 
             os.chdir(package_path)
+            
+            # Get subprocess kwargs to hide CMD window on Windows
+            subprocess_kwargs = self._get_subprocess_kwargs()
 
-            subprocess.run(["git", "init"], check=True, capture_output=True)
-            subprocess.run(["git", "branch", "-M", "main"], check=True, capture_output=True)
-            subprocess.run(["git", "remote", "add", "origin", repo_url], check=True, capture_output=True)
+            subprocess.run(["git", "init"], check=True, capture_output=True, **subprocess_kwargs)
+            subprocess.run(["git", "branch", "-M", "main"], check=True, capture_output=True, **subprocess_kwargs)
+            subprocess.run(["git", "remote", "add", "origin", repo_url], check=True, capture_output=True, **subprocess_kwargs)
 
             try:
-                subprocess.run(["git", "config", "user.name"], check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.name"], check=True, capture_output=True, **subprocess_kwargs)
             except subprocess.CalledProcessError:
                 author_name = self.config.get_value(key='author_name', default='Author')
-                subprocess.run(["git", "config", "user.name", author_name], check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.name", author_name], check=True, capture_output=True, **subprocess_kwargs)
 
             try:
-                subprocess.run(["git", "config", "user.email"], check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.email"], check=True, capture_output=True, **subprocess_kwargs)
             except subprocess.CalledProcessError:
                 author_email = self.config.get_value(key='author_email', default='author@example.com')
-                subprocess.run(["git", "config", "user.email", author_email], check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.email", author_email], check=True, capture_output=True, **subprocess_kwargs)
 
-            subprocess.run(["git", "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "add", "."], check=True, capture_output=True, **subprocess_kwargs)
 
             commit_message = f"chore: initial package structure\n\n- Unity package configuration v{initial_version}\n- Documentation and samples\n- Runtime and Editor assemblies"
-            subprocess.run(["git", "commit", "-m", commit_message], check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-m", commit_message], check=True, capture_output=True, **subprocess_kwargs)
 
-            subprocess.run(["git", "push", "-u", "origin", "main"], check=True, capture_output=True)
+            subprocess.run(["git", "push", "-u", "origin", "main"], check=True, capture_output=True, **subprocess_kwargs)
 
             self._create_initial_release(repo_name, initial_version, display_name)
 

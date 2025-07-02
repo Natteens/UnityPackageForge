@@ -8,9 +8,17 @@ def open_folder(path):
         if sys.platform == 'win32':
             os.startfile(path)
         elif sys.platform == 'darwin':  # macOS
-            subprocess.run(['open', path])
+            # Hide subprocess window on Windows (doesn't apply to macOS but keeping consistent structure)
+            kwargs = {}
+            if sys.platform == "win32":
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            subprocess.run(['open', path], **kwargs)
         else:  # Linux
-            subprocess.run(['xdg-open', path])
+            # Hide subprocess window on Windows (doesn't apply to Linux but keeping consistent structure)
+            kwargs = {}
+            if sys.platform == "win32":
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            subprocess.run(['xdg-open', path], **kwargs)
     else:
         print(f"Path does not exist: {path}")
 
@@ -70,7 +78,12 @@ def check_dependency(module_name):
 
 def install_dependency(module_name):
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", module_name])
+        # Hide CMD window on Windows
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        
+        subprocess.check_call([sys.executable, "-m", "pip", "install", module_name], **kwargs)
         return True
     except subprocess.CalledProcessError:
         return False

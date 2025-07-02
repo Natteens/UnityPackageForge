@@ -1,10 +1,14 @@
 import configparser
 import os
+from utils.crypto_utils import get_crypto_instance
 
 class ConfigManager:
     def __init__(self, config_file='config.ini'):
         self.config_file = config_file
         self.config = configparser.ConfigParser()
+        self.crypto = get_crypto_instance()
+        self.sensitive_keys = {'token'}  # Keys that should be encrypted
+        self.auto_save_enabled = True  # Enable auto-save by default
         self.load_config()
     
     def load_config(self):
@@ -29,15 +33,27 @@ class ConfigManager:
     
     def get_value(self, section='DEFAULT', key=None, default=None):
         try: 
-            return self.config[section][key]
+            value = self.config[section][key]
+            # Decrypt sensitive values
+            if key in self.sensitive_keys and value:
+                value = self.crypto.decrypt(value)
+            return value
         except (KeyError, ValueError): 
             return default
     
     def set_value(self, section='DEFAULT', key=None, value=None):
         if section not in self.config: 
             self.config[section] = {}
+        
+        # Encrypt sensitive values
+        if key in self.sensitive_keys and value:
+            value = self.crypto.encrypt(value)
+        
         self.config[section][key] = value
-        self.save_config()
+        
+        # Auto-save if enabled
+        if self.auto_save_enabled:
+            self.save_config()
 
     def get_custom_dependencies(self):
         if 'dependencies' not in self.config:
@@ -117,3 +133,17 @@ class ConfigManager:
             else:
                 return {"version": value, "name": package_id.split('.')[-1].title()}
         return None
+
+    def set_auto_save(self, enabled):
+        """Enable or disable auto-save functionality"""
+        self.auto_save_enabled = enabled
+    
+    def get_decrypted_value(self, section='DEFAULT', key=None, default=None):
+        """Get a value that should be decrypted (for testing without saving)"""
+        try:
+            value = self.config[section][key]
+            if key in self.sensitive_keys and value:
+                return self.crypto.decrypt(value)
+            return value
+        except (KeyError, ValueError):
+            return default
