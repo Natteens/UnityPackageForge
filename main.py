@@ -10,7 +10,6 @@ from ui.strings import (
 )
 
 def install_dependencies():
-    """Instala dependências necessárias se não estiverem disponíveis"""
     required_packages = ['requests', 'customtkinter']
     missing_packages = []
 
@@ -25,18 +24,15 @@ def install_dependencies():
         subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
 
 def start_gui():
-    """Inicializa a interface gráfica com configurações otimizadas"""
     ctk.set_appearance_mode(APP_APPEARANCE_MODE)
     ctk.set_default_color_theme(APP_COLOR_THEME)
 
     root = ctk.CTk()
     root.title(f"Unity Package Forge v{get_current_version()}")
 
-    # Forçar o tamanho da janela primeiro
     root.geometry(APP_GEOMETRY)
     root.minsize(APP_MIN_SIZE[0], APP_MIN_SIZE[1])
 
-    # Retirar da tela primeiro para evitar flicker
     root.withdraw()
 
     try:
@@ -46,36 +42,28 @@ def start_gui():
     except Exception as e:
         print(ERROR_ICON_LOAD.format(error=str(e)))
 
-    # Criar a interface
     app = PackageGeneratorGUI(root)
 
-    # Centralizar janela após tudo estar criado
     def center_and_show():
         root.update_idletasks()
 
-        # Obter dimensões reais da janela
-        width = APP_MIN_SIZE[0]  # Usar o tamanho definido
+        # Obter dimensões reais da
+        width = APP_MIN_SIZE[0]
         height = APP_MIN_SIZE[1]
 
-        # Obter dimensões da tela
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
 
-        # Calcular posição central
         x = (screen_width - width) // 2
         y = (screen_height - height) // 2
 
-        # Garantir que não saia da tela
         x = max(0, x)
         y = max(0, y)
 
-        # Aplicar geometria centralizada
         root.geometry(f"{width}x{height}+{x}+{y}")
 
-        # Mostrar a janela centralizada
         root.deiconify()
 
-    # Centralizar após 50ms
     root.after(50, center_and_show)
 
     root.mainloop()
