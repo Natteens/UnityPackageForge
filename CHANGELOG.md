@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/Natteens/UnityPackageForge/compare/v1.2.0...v1.2.1) (2025-07-02)
+
+
+### Bug Fixes
+
+* Remove setuptools from requirements.txt ([6c7f88b](https://github.com/Natteens/UnityPackageForge/commit/6c7f88b714b1f848ea7c8ee5714cee4c7c5f0d0f))
+
 # [1.2.0](https://github.com/Natteens/UnityPackageForge/compare/v1.1.2...v1.2.0) (2025-07-02)
 
 
