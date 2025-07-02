@@ -1,7 +1,6 @@
 from setuptools import setup, find_packages
 import os
 
-# Ler README para descrição longa
 def read_readme():
     try:
         with open('README.md', 'r', encoding='utf-8') as f:
@@ -9,7 +8,6 @@ def read_readme():
     except FileNotFoundError:
         return "Unity Package Forge - Gerador profissional de pacotes Unity"
 
-# Ler versão do CHANGELOG
 def get_version():
     try:
         import re

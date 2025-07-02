@@ -22,7 +22,6 @@ def install_dependencies():
     if missing_packages:
         print(f"Instalando dependências: {', '.join(missing_packages)}")
         
-        # Hide CMD window on Windows
         import sys
         kwargs = {}
         if sys.platform == "win32":
@@ -54,7 +53,6 @@ def start_gui():
     def center_and_show():
         root.update_idletasks()
 
-        # Obter dimensões reais da
         width = APP_MIN_SIZE[0]
         height = APP_MIN_SIZE[1]
 

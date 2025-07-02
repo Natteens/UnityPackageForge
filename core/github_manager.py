@@ -13,7 +13,6 @@ class GitHubManager:
         self.username = self.config.get_value(section='github', key='username', default='')
     
     def _get_subprocess_kwargs(self):
-        """Get subprocess kwargs to hide CMD window on Windows"""
         kwargs = {}
         if sys.platform == "win32":
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
@@ -52,7 +51,6 @@ class GitHubManager:
             response.raise_for_status()
             user_data = response.json()
 
-            # Verificar se o username bate com o do token
             token_username = user_data.get('login', '')
             if self.username.lower() != token_username.lower():
                 return False, f"Username não confere: configurado '{self.username}', token é de '{token_username}'"
@@ -124,7 +122,6 @@ class GitHubManager:
 
             os.chdir(package_path)
             
-            # Get subprocess kwargs to hide CMD window on Windows
             subprocess_kwargs = self._get_subprocess_kwargs()
 
             subprocess.run(["git", "init"], check=True, capture_output=True, **subprocess_kwargs)

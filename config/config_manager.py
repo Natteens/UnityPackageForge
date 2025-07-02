@@ -7,8 +7,8 @@ class ConfigManager:
         self.config_file = config_file
         self.config = configparser.ConfigParser()
         self.crypto = get_crypto_instance()
-        self.sensitive_keys = {'token'}  # Keys that should be encrypted
-        self.auto_save_enabled = True  # Enable auto-save by default
+        self.sensitive_keys = {'token'}
+        self.auto_save_enabled = True
         self.load_config()
     
     def load_config(self):
@@ -45,17 +45,14 @@ class ConfigManager:
         if section not in self.config: 
             self.config[section] = {}
         
-        # Convert value to string if it's not already
         if value is not None:
             value = str(value)
         
-        # Encrypt sensitive values
         if key in self.sensitive_keys and value:
             value = self.crypto.encrypt(value)
         
         self.config[section][key] = value or ''
         
-        # Auto-save if enabled
         if self.auto_save_enabled:
             self.save_config()
 
@@ -139,11 +136,9 @@ class ConfigManager:
         return None
 
     def set_auto_save(self, enabled):
-        """Enable or disable auto-save functionality"""
         self.auto_save_enabled = enabled
     
     def get_decrypted_value(self, section='DEFAULT', key=None, default=None):
-        """Get a value that should be decrypted (for testing without saving)"""
         try:
             value = self.config[section][key]
             if key in self.sensitive_keys and value:

@@ -2,14 +2,12 @@ import re
 import os
 
 def get_current_version():
-    """Get current version from CHANGELOG.md with robust parsing"""
     try:
         changelog_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'CHANGELOG.md')
         if os.path.exists(changelog_path):
             with open(changelog_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-                # Try multiple patterns to find version numbers
                 patterns = [
                     r'##\s*\[(\d+\.\d+\.\d+)\]',  # ## [1.2.3]
                     r'#\s*\[(\d+\.\d+\.\d+)\]',   # # [1.2.3] 
@@ -22,14 +20,12 @@ def get_current_version():
                     match = re.search(pattern, content)
                     if match:
                         version = match.group(1)
-                        # Validate it's a proper semantic version
                         if re.match(r'^\d+\.\d+\.\d+$', version):
                             return version
                         
     except Exception as e:
         print(f"Erro ao extrair versão: {e}")
     
-    # Fallback: try to get from setup.py or other sources
     try:
         setup_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'setup.py')
         if os.path.exists(setup_path):
