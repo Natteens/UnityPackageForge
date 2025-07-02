@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/Natteens/UnityPackageForge/compare/v1.1.2...v1.2.0) (2025-07-02)
+
+
+### Features
+
+* Refactoring and more improvements ([f54265b](https://github.com/Natteens/UnityPackageForge/commit/f54265bacb843c3b39a58b6506fa15a8f3b413c8))
+
 ## [1.1.2](https://github.com/Natteens/UnityPackageForge/compare/v1.1.1...v1.1.2) (2025-05-21)
 
 
