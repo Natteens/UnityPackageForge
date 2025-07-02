@@ -1,3 +1,10 @@
+## [1.2.6](https://github.com/Natteens/UnityPackageForge/compare/v1.2.5...v1.2.6) (2025-07-02)
+
+
+### Bug Fixes
+
+* Remove redundant comments and clean up codebase ([c16e6bb](https://github.com/Natteens/UnityPackageForge/commit/c16e6bbce9a33387af2b1e1c89a8e35015f9f1a9))
+
 ## [1.2.5](https://github.com/Natteens/UnityPackageForge/compare/v1.2.4...v1.2.5) (2025-07-02)
 
 
