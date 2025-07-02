@@ -45,11 +45,15 @@ class ConfigManager:
         if section not in self.config: 
             self.config[section] = {}
         
+        # Convert value to string if it's not already
+        if value is not None:
+            value = str(value)
+        
         # Encrypt sensitive values
         if key in self.sensitive_keys and value:
             value = self.crypto.encrypt(value)
         
-        self.config[section][key] = value
+        self.config[section][key] = value or ''
         
         # Auto-save if enabled
         if self.auto_save_enabled:
