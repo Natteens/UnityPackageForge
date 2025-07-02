@@ -1,3 +1,10 @@
+## [1.2.5](https://github.com/Natteens/UnityPackageForge/compare/v1.2.4...v1.2.5) (2025-07-02)
+
+
+### Bug Fixes
+
+* Merge pull request [#5](https://github.com/Natteens/UnityPackageForge/issues/5) from Natteens/copilot/fix-6e15aa88-7e52-467b-b6e7-1f9c3f709691 ([37954ea](https://github.com/Natteens/UnityPackageForge/commit/37954eae2689789b0a25ba5ffd996c37ae803e6a))
+
 ## [1.2.4](https://github.com/Natteens/UnityPackageForge/compare/v1.2.3...v1.2.4) (2025-07-02)
 
 
