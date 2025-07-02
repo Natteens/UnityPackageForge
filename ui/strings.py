@@ -179,6 +179,29 @@ REPO_ERROR_PREFIX = "❌ Erro ao criar repositório: "
 
 # NOVOS TEMPLATES PARA SEMANTIC RELEASE
 
+# Template para package.json do Node.js (para Semantic Release)
+NODE_PACKAGE_JSON_TEMPLATE = '''{{
+  "name": "{repo_name}",
+  "version": "0.0.0-development",
+  "description": "{description}",
+  "repository": {{
+    "type": "git",
+    "url": "git+https://github.com/{username}/{repo_name}.git"
+  }},
+  "author": "{author}",
+  "license": "{license}",
+  "bugs": {{
+    "url": "https://github.com/{username}/{repo_name}/issues"
+  }},
+  "homepage": "https://github.com/{username}/{repo_name}#readme",
+  "devDependencies": {{
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^8.0.7",
+    "semantic-release": "^22.0.5"
+  }}
+}}'''
+
 # Template para arquivo .releaserc.json
 RELEASERC_JSON = """{
   "branches": ["main"],
@@ -196,7 +219,7 @@ RELEASERC_JSON = """{
 }"""
 
 # Template atualizado para o workflow de release
-RELEASE_WORKFLOW = """name: release
+RELEASE_WORKFLOW = """name: Release
 
 on:
   push:
@@ -210,49 +233,49 @@ permissions:
 
 jobs:
   release:
-    name: Release
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 20
 
-      - name: Filter Unity dependencies dynamically
+      - name: Setup Node.js package for semantic-release
         run: |
-          # Verifica se o package.json existe e tem uma seção dependencies
-          if [ -f package.json ] && jq -e '.dependencies // empty | type=="object"' package.json > /dev/null; then
-            # Identifica pacotes relacionados à Unity no package.json e os remove
-            unity_packages=$(jq -r '.dependencies | keys[] | select(test("unity|Unity|com.unity"))' package.json 2>/dev/null || echo "")
-            echo "Pacotes Unity encontrados: $unity_packages"
-
-            if [ -n "$unity_packages" ]; then
-              echo "Removendo pacotes Unity..."
-              for pkg in $unity_packages; do
-                jq "del(.dependencies[\"$pkg\"])" package.json > package.filtered.json
-                mv package.filtered.json package.json
-              done
+          # Check if we have a separate Node.js package.json
+          if [ -f node-package.json ]; then
+            echo "Using node-package.json for semantic-release"
+            # Backup Unity package.json if it exists
+            if [ -f package.json ]; then
+              mv package.json unity-package.json
             fi
-          else
-            echo "Não foram encontradas dependências no package.json ou o arquivo não existe."
+            # Use the Node.js package.json
+            mv node-package.json package.json
           fi
 
-      - name: Install dependencies (no lock)
-        run: npm install --no-package-lock
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Release
-        uses: cycjimmy/semantic-release-action@v4
-        with:
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Restore Unity package.json
+        run: |
+          # Restore the original Unity package.json structure
+          if [ -f unity-package.json ]; then
+            mv package.json node-package.json
+            mv unity-package.json package.json
+          fi
 """

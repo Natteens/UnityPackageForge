@@ -1,8 +1,9 @@
 import os
 import json
+import subprocess
 from datetime import datetime
 
-from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
+from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON, NODE_PACKAGE_JSON_TEMPLATE
 
 
 class PackageGenerator:
@@ -318,32 +319,73 @@ class PackageGenerator:
         # Criar .releaserc.json na raiz do pacote
         self._create_file(os.path.join(base_path, ".releaserc.json"), RELEASERC_JSON)
 
-        # Arquivo .gitignore específico para Unity
+        # Arquivo .gitignore específico para Unity (removendo exclusão do package-lock.json)
         gitignore_content = (
             "# Unity specific\nLibrary/\nTemp/\nLogs/\nUserSettings/\nobj/\nBuild/\nBuilds/\n"
             ".DS_Store\n*.csproj\n*.unityproj\n*.sln\n*.suo\n*.tmp\n*.user\n*.userprefs\n"
             "*.pidb\n*.booproj\n*.svd\n*.pdb\n*.mdb\n*.opendb\n*.VC.db\n"
             "# IDE\n.vs/\n.idea/\n.vscode/\n"
-            "# Node.js\nnode_modules/\npackage-lock.json\n"
+            "# Node.js\nnode_modules/\n"
         )
         self._create_file(os.path.join(base_path, ".gitignore"), gitignore_content)
 
-        # Adicionar arquivo package.json.node para semantic-release
-        node_package = {
-            "name": os.path.basename(base_path).lower(),
-            "version": "0.0.0-development",
-            "private": True,
-            "devDependencies": {
-                "@semantic-release/changelog": "^6.0.3",
-                "@semantic-release/git": "^10.0.1",
-                "@semantic-release/github": "^8.0.7",
-                "semantic-release": "^21.0.5"
-            },
-            "scripts": {
-                "semantic-release": "semantic-release"
-            }
-        }
-        self._create_file(os.path.join(base_path, "package.json.node"), json.dumps(node_package, indent=2))
+        # Criar package.json do Node.js para semantic-release usando o template
+        repo_name = os.path.basename(base_path).lower()
+        # Obter dados de configuração do usuário 
+        author = self.config.get_value(section='user', key='name', default='Autor')
+        username = self.config.get_value(section='github', key='username', default='usuario')
+        
+        node_package_content = NODE_PACKAGE_JSON_TEMPLATE.format(
+            repo_name=repo_name,
+            description=f"Unity Package: {repo_name}",
+            username=username,
+            author=author,
+            license="MIT"
+        )
+        
+        # Criar arquivo package.json para Node.js na raiz (separado do Unity package.json)
+        node_package_path = os.path.join(base_path, "node-package.json")
+        self._create_file(node_package_path, node_package_content)
+        
+        # Mover o arquivo Node.js para package.json temporariamente para gerar o lock file
+        unity_package_path = os.path.join(base_path, "package.json")
+        temp_unity_package_path = os.path.join(base_path, "unity-package.json")
+        
+        try:
+            # Fazer backup do package.json do Unity se existir
+            if os.path.exists(unity_package_path):
+                os.rename(unity_package_path, temp_unity_package_path)
+            
+            # Mover o Node.js package.json para ser o principal
+            os.rename(node_package_path, unity_package_path)
+            
+            # Executar npm install para gerar package-lock.json
+            self.log("📦 Gerando package-lock.json...")
+            try:
+                subprocess.run(['npm', 'install'], cwd=base_path, check=True, 
+                             capture_output=True, text=True)
+                self.log("✅ package-lock.json gerado com sucesso!")
+            except subprocess.CalledProcessError as e:
+                self.log(f"⚠️ Aviso: Não foi possível gerar package-lock.json: {e}")
+                # Continuar mesmo se npm install falhar
+            except FileNotFoundError:
+                self.log("⚠️ Aviso: npm não encontrado. package-lock.json não foi gerado.")
+            
+            # Restaurar o package.json do Unity
+            if os.path.exists(temp_unity_package_path):
+                os.rename(unity_package_path, node_package_path)
+                os.rename(temp_unity_package_path, unity_package_path)
+            else:
+                # Se não havia package.json do Unity, manter apenas o Node.js
+                pass
+                
+        except Exception as e:
+            self.log(f"❌ Erro ao configurar arquivos Node.js: {e}")
+            # Restaurar estado original em caso de erro
+            if os.path.exists(temp_unity_package_path):
+                if os.path.exists(unity_package_path):
+                    os.remove(unity_package_path)
+                os.rename(temp_unity_package_path, unity_package_path)
 
         # Adicionar arquivo de configuração para publicação futura no npm/OpenUPM
         npmrc_content = "registry=https://registry.npmjs.org/\n"
