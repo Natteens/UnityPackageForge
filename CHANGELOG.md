@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/Natteens/UnityPackageForge/compare/v1.2.1...v1.2.2) (2025-07-02)
+
+
+### Bug Fixes
+
+* Enhance release workflow with tag output and artifact upload ([af7187c](https://github.com/Natteens/UnityPackageForge/commit/af7187cbd4ca4cbd98bd977276149afbfe3fc993))
+
 ## [1.2.1](https://github.com/Natteens/UnityPackageForge/compare/v1.2.0...v1.2.1) (2025-07-02)
 
 
