@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/Natteens/UnityPackageForge/compare/v1.2.2...v1.2.3) (2025-07-02)
+
+
+### Bug Fixes
+
+* yml ([1cbdec3](https://github.com/Natteens/UnityPackageForge/commit/1cbdec3d35ba6710df00db10381f4f43b0030555))
+
 ## [1.2.2](https://github.com/Natteens/UnityPackageForge/compare/v1.2.1...v1.2.2) (2025-07-02)
 
 
