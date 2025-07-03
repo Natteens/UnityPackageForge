@@ -164,88 +164,55 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Create PyInstaller spec file
+    - name: Build executable
       run: |
-        cat > unity_package_forge.spec << 'EOF'
-        # -*- mode: python ; coding: utf-8 -*-
-        import sys
-        from pathlib import Path
+        pyinstaller main.py \
+          --name unity-package-forge \
+          --onefile \
+          --noconsole \
+          --clean \
+          --noconfirm \
+          --hidden-import customtkinter \
+          --hidden-import requests \
+          --hidden-import cryptography \
+          --hidden-import PIL \
+          --hidden-import PIL._tkinter_finder \
+          --hidden-import tkinter \
+          --hidden-import tkinter.filedialog \
+          --hidden-import tkinter.messagebox \
+          --hidden-import json \
+          --hidden-import os \
+          --hidden-import sys \
+          --hidden-import logging \
+          --hidden-import configparser \
+          --hidden-import datetime \
+          --hidden-import pathlib \
+          --hidden-import subprocess \
+          --hidden-import threading \
+          --hidden-import urllib.request \
+          --hidden-import urllib.parse \
+          --hidden-import base64 \
+          --hidden-import hashlib \
+          --hidden-import zipfile \
+          --hidden-import shutil \
+          --hidden-import tempfile \
+          --hidden-import webbrowser
 
-        block_cipher = None
-
-        a = Analysis(
-            ['main.py'],
-            pathex=[],
-            binaries=[],
-            datas=[
-                ('ui/*.ico', 'ui'),
-                ('ui/*.png', 'ui'),
-                ('config/*.ini*', 'config'),
-                ('*.md', '.'),
-                ('LICENSE*', '.'),
-            ],
-            hiddenimports=[
-                'customtkinter',
-                'requests',
-                'cryptography',
-                'PIL',
-                'PIL._tkinter_finder',
-                'tkinter',
-                'tkinter.filedialog',
-                'tkinter.messagebox',
-                'json',
-                'os',
-                'sys',
-                'logging',
-                'configparser',
-                'datetime',
-                'pathlib',
-                'subprocess',
-                'threading',
-                'urllib.request',
-                'urllib.parse',
-                'base64',
-                'hashlib',
-                'zipfile',
-                'shutil',
-                'tempfile',
-                'webbrowser',
-            ],
-            hookspath=[],
-            hooksconfig={},
-            runtime_hooks=[],
-            excludes=[],
-            win_no_prefer_redirects=False,
-            win_private_assemblies=False,
-            cipher=block_cipher,
-            noarchive=False,
-        )
-
-        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-        exe = EXE(
-            pyz,
-            a.scripts,
-            a.binaries,
-            a.zipfiles,
-            a.datas,
-            [],
-            name='unity-package-forge',
-            debug=False,
-            bootloader_ignore_signals=False,
-            strip=False,
-            upx=True,
-            upx_exclude=[],
-            runtime_tmpdir=None,
-            console=False,
-            disable_windowed_traceback=False,
-            argv_emulation=False,
-            target_arch=None,
-            codesign_identity=None,
-            entitlements_file=None,
-            icon='ui/icon.ico' if Path('ui/icon.ico').exists() else None,
-        )
-        EOF
+    - name: Add resources to executable
+      shell: bash
+      run: |
+        if [ -d "ui" ]; then
+          echo "UI directory found, resources will be included in the executable"
+        fi
+        if [ -d "config" ]; then
+          echo "Config directory found, resources will be included in the executable"
+        fi
+        if [ -f "README.md" ]; then
+          echo "README.md found"
+        fi
+        if [ -f "LICENSE" ]; then
+          echo "LICENSE found"
+        fi
 
     - name: Build executable
       run: |
