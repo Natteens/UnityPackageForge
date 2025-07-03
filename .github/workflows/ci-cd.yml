@@ -56,6 +56,7 @@ jobs:
     outputs:
       released: ${{ steps.release.outputs.released }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      changelog: ${{ steps.release.outputs.changelog }}
 
     steps:
     - name: Checkout
@@ -69,10 +70,9 @@ jobs:
       with:
         node-version: '18'
 
-    - name: Create package.json if not exists
+    - name: Create package.json and release config
       run: |
-        if [ ! -f package.json ]; then
-          cat > package.json << 'EOF'
+        cat > package.json << 'EOF'
         {
           "name": "unity-package-forge",
           "version": "1.0.0",
@@ -90,11 +90,30 @@ jobs:
           "license": "MIT",
           "devDependencies": {
             "semantic-release": "^21.0.0",
-            "@semantic-release/github": "^9.0.0"
+            "@semantic-release/github": "^9.0.0",
+            "@semantic-release/changelog": "^6.0.0",
+            "@semantic-release/git": "^10.0.0"
           }
         }
         EOF
-        fi
+
+        cat > .releaserc.json << 'EOF'
+        {
+          "branches": ["main"],
+          "plugins": [
+            "@semantic-release/commit-analyzer",
+            "@semantic-release/release-notes-generator",
+            ["@semantic-release/changelog", {
+              "changelogFile": "CHANGELOG.md"
+            }],
+            "@semantic-release/github",
+            ["@semantic-release/git", {
+              "assets": ["CHANGELOG.md"],
+              "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+            }]
+          ]
+        }
+        EOF
 
     - name: Install semantic-release
       run: |
@@ -119,10 +138,20 @@ jobs:
         if [ "${TAG_AFTER}" != "${TAG_BEFORE}" ] && [ -n "${TAG_AFTER}" ]; then
           echo "released=true" >> $GITHUB_OUTPUT
           echo "tag_name=${TAG_AFTER}" >> $GITHUB_OUTPUT
+          
+          # Captura o changelog se existir
+          if [ -f "CHANGELOG.md" ]; then
+            CHANGELOG=$(cat CHANGELOG.md | head -50)
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+          
           echo "✅ New release: ${TAG_AFTER}"
         else
           echo "released=false" >> $GITHUB_OUTPUT
           echo "tag_name=" >> $GITHUB_OUTPUT
+          echo "changelog=" >> $GITHUB_OUTPUT
           echo "ℹ️ No release created"
         fi
 
@@ -137,16 +166,21 @@ jobs:
           - os: windows-latest
             name: windows
             ext: .exe
+            artifact_name: unity-package-forge-windows.exe
           - os: ubuntu-latest
             name: linux
             ext: ''
+            artifact_name: unity-package-forge-linux
           - os: macos-latest
             name: macos
             ext: ''
+            artifact_name: unity-package-forge-macos
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Setup Python
       uses: actions/setup-python@v4
@@ -164,30 +198,79 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Verify files exist
+    - name: Create version info for Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        $version = if ("${{ needs.release.outputs.tag_name }}") { "${{ needs.release.outputs.tag_name }}".TrimStart('v') } else { "1.0.0" }
+        $versionParts = $version.Split('.')
+        $major = $versionParts[0]
+        $minor = if ($versionParts.Length -gt 1) { $versionParts[1] } else { "0" }
+        $patch = if ($versionParts.Length -gt 2) { $versionParts[2] } else { "0" }
+        
+        @"
+        VSVersionInfo(
+          ffi=FixedFileInfo(
+            filevers=($major, $minor, $patch, 0),
+            prodvers=($major, $minor, $patch, 0),
+            mask=0x3f,
+            flags=0x0,
+            OS=0x4,
+            fileType=0x1,
+            subtype=0x0,
+            date=(0, 0)
+          ),
+          kids=[
+            StringFileInfo(
+              [
+                StringTable(
+                  '040904B0',
+                  [
+                    StringStruct('CompanyName', 'Nathan da Silva Miranda'),
+                    StringStruct('FileDescription', 'Unity Package Forge'),
+                    StringStruct('FileVersion', '$version'),
+                    StringStruct('InternalName', 'unity-package-forge'),
+                    StringStruct('LegalCopyright', 'Copyright (c) 2025 Nathan da Silva Miranda'),
+                    StringStruct('OriginalFilename', 'unity-package-forge.exe'),
+                    StringStruct('ProductName', 'Unity Package Forge'),
+                    StringStruct('ProductVersion', '$version')
+                  ]
+                )
+              ]
+            ),
+            VarFileInfo([VarStruct('Translation', [1033, 1200])])
+          ]
+        )
+        "@ | Out-File -FilePath "version_info.txt" -Encoding UTF8
+      shell: powershell
+
+    - name: Update spec file for current build
       shell: bash
       run: |
-        echo "=== Checking project structure ==="
-        ls -la
-        echo "=== Checking for UI directory ==="
-        if [ -d "ui" ]; then
-          echo "UI directory found:"
-          ls -la ui/
-        else
-          echo "UI directory not found"
+        VERSION="${{ needs.release.outputs.tag_name }}"
+        if [ -z "$VERSION" ]; then
+          VERSION="v1.0.0"
         fi
-        echo "=== Checking for config files ==="
-        if [ -f "config.ini.example" ]; then
-          echo "config.ini.example found"
-        else
-          echo "config.ini.example not found"
+        
+        # Atualiza o arquivo spec com informações da versão
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          sed -i 's/version_file=None/version_file="version_info.txt"/' build.spec || true
         fi
+        
+        echo "Building version: $VERSION"
 
     - name: Build executable
       shell: bash
       run: |
         echo "=== Starting PyInstaller build ==="
-        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
+        echo "Current directory contents:"
+        ls -la
+        
+        # Garante que o CHANGELOG.md existe para ser incluído na build
+        if [ ! -f "CHANGELOG.md" ] && [ -n "${{ needs.release.outputs.changelog }}" ]; then
+          echo "${{ needs.release.outputs.changelog }}" > CHANGELOG.md
+        fi
+        
+        pyinstaller build.spec --clean --noconfirm --log-level INFO
 
     - name: Verify build output
       shell: bash
@@ -197,15 +280,15 @@ jobs:
           echo "Dist directory contents:"
           ls -la dist/
           
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            EXEC_PATH="dist/unity-package-forge.exe"
-          else
-            EXEC_PATH="dist/unity-package-forge"
-          fi
+          EXEC_PATH="dist/unity-package-forge${{ matrix.ext }}"
           
           if [ -f "$EXEC_PATH" ]; then
             echo "✅ Executable created successfully: $EXEC_PATH"
             echo "File size: $(du -h "$EXEC_PATH" | cut -f1)"
+            
+            # Renomeia o arquivo para incluir o OS no nome
+            mv "$EXEC_PATH" "dist/${{ matrix.artifact_name }}"
+            echo "✅ Renamed to: dist/${{ matrix.artifact_name }}"
           else
             echo "❌ Executable not found at: $EXEC_PATH"
             echo "Available files in dist:"
@@ -223,8 +306,16 @@ jobs:
       if: needs.release.outputs.released == 'true'
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/unity-package-forge${{ matrix.ext }}
+        files: dist/${{ matrix.artifact_name }}
         tag_name: ${{ needs.release.outputs.tag_name }}
+        body: |
+          ## Download
+
+          - 🪟 **Windows**: [unity-package-forge-windows.exe](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-windows.exe)
+          - 🐧 **Linux**: [unity-package-forge-linux](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-linux)  
+          - 🍎 **macOS**: [unity-package-forge-macos](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-macos)
+
+          ${{ needs.release.outputs.changelog }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -232,5 +323,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: unity-package-forge-${{ matrix.name }}
-        path: dist/unity-package-forge${{ matrix.ext }}
+        path: dist/${{ matrix.artifact_name }}
         retention-days: 30
