@@ -1,3 +1,10 @@
+## [1.2.16](https://github.com/Natteens/UnityPackageForge/compare/v1.2.15...v1.2.16) (2025-07-03)
+
+
+### Bug Fixes
+
+* icon ([da706ba](https://github.com/Natteens/UnityPackageForge/commit/da706badb198e32cced9984ffb65005eb4563e8b))
+
 ## [1.2.15](https://github.com/Natteens/UnityPackageForge/compare/v1.2.14...v1.2.15) (2025-07-03)
 
 
