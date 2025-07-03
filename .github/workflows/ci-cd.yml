@@ -98,7 +98,7 @@ jobs:
 
     - name: Install semantic-release
       run: |
-        npm install semantic-release @semantic-release/github
+        npm install semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator        
 
     - name: Get tag before release
       id: tag_before
@@ -126,8 +126,8 @@ jobs:
           echo "ℹ️ No release created"
         fi
 
-  build:
-    needs: [test, release]
+  buield:
+    neds: [test, release]
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
