@@ -24,12 +24,12 @@ setup(
     name="unity-package-forge",
     version=get_version(),
     author="Nathan da Silva Miranda",
-    author_email="natteens@gmail.com",
+    author_email="natteens.social@gmail.com",
     description="Gerador profissional de pacotes Unity com integração GitHub",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     url="https://github.com/Natteens/UnityPackageForge",
-    packages=find_packages(),
+    py_modules=["main"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -48,10 +48,11 @@ setup(
     install_requires=[
         "requests>=2.25.0",
         "customtkinter>=5.2.0",
+        "cryptography>=44.0.1",
+        "pyinstaller>=5.0",
     ],
     extras_require={
         "dev": [
-            "pyinstaller>=5.0",
             "pytest>=6.0",
             "black",
             "flake8",
@@ -63,9 +64,6 @@ setup(
         ],
     },
     include_package_data=True,
-    package_data={
-        "ui": ["*.ico"],
-    },
     keywords=[
         "unity", "unity3d", "package", "generator", "github",
         "gamedev", "unity-package-manager", "upm"

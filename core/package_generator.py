@@ -273,7 +273,7 @@ class PackageGenerator:
         os.makedirs(github_path, exist_ok=True)
 
         self._create_file(
-            os.path.join(github_path, "release.yml"),
+            os.path.join(github_path, "ci-cd.yml"),
             RELEASE_WORKFLOW
         )
 

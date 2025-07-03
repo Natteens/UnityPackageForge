@@ -1,0 +1,286 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Test imports
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        try:
+            from utils.resource_utils import get_resource_path, is_executable
+            from utils.crypto_utils import get_crypto_instance
+            from utils.version_utils import get_current_version
+            print('✅ All imports successful')
+        except Exception as e:
+            print(f'❌ Import error: {e}')
+            sys.exit(1)
+        "
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Create package.json if not exists
+      run: |
+        if [ ! -f package.json ]; then
+          cat > package.json << 'EOF'
+        {
+          "name": "unity-package-forge",
+          "version": "1.0.0",
+          "description": "Unity Package Forge",
+          "main": "main.py",
+          "scripts": {
+            "test": "echo \"Error: no test specified\" && exit 1"
+          },
+          "repository": {
+            "type": "git",
+            "url": "git+https://github.com/Natteens/UnityPackageForge.git"
+          },
+          "keywords": ["unity", "package", "generator"],
+          "author": "Nathan da Silva Miranda",
+          "license": "MIT",
+          "devDependencies": {
+            "semantic-release": "^21.0.0",
+            "@semantic-release/github": "^9.0.0"
+          }
+        }
+        EOF
+        fi
+
+    - name: Install semantic-release
+      run: |
+        npm install semantic-release @semantic-release/github
+
+    - name: Get tag before release
+      id: tag_before
+      run: |
+        TAG_BEFORE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        echo "tag_before=${TAG_BEFORE}" >> $GITHUB_OUTPUT
+
+    - name: Release
+      id: release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        npx semantic-release
+        
+        TAG_AFTER=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        TAG_BEFORE="${{ steps.tag_before.outputs.tag_before }}"
+        
+        if [ "${TAG_AFTER}" != "${TAG_BEFORE}" ] && [ -n "${TAG_AFTER}" ]; then
+          echo "released=true" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_AFTER}" >> $GITHUB_OUTPUT
+          echo "✅ New release: ${TAG_AFTER}"
+        else
+          echo "released=false" >> $GITHUB_OUTPUT
+          echo "tag_name=" >> $GITHUB_OUTPUT
+          echo "ℹ️ No release created"
+        fi
+
+  build:
+    needs: [test, release]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            ext: .exe
+          - os: ubuntu-latest
+            name: linux
+            ext: ''
+          - os: macos-latest
+            name: macos
+            ext: ''
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Create PyInstaller spec file
+      run: |
+        cat > unity_package_forge.spec << 'EOF'
+        # -*- mode: python ; coding: utf-8 -*-
+        import sys
+        from pathlib import Path
+
+        block_cipher = None
+
+        a = Analysis(
+            ['main.py'],
+            pathex=[],
+            binaries=[],
+            datas=[
+                ('ui/*.ico', 'ui'),
+                ('ui/*.png', 'ui'),
+                ('config/*.ini*', 'config'),
+                ('*.md', '.'),
+                ('LICENSE*', '.'),
+            ],
+            hiddenimports=[
+                'customtkinter',
+                'requests',
+                'cryptography',
+                'PIL',
+                'PIL._tkinter_finder',
+                'tkinter',
+                'tkinter.filedialog',
+                'tkinter.messagebox',
+                'json',
+                'os',
+                'sys',
+                'logging',
+                'configparser',
+                'datetime',
+                'pathlib',
+                'subprocess',
+                'threading',
+                'urllib.request',
+                'urllib.parse',
+                'base64',
+                'hashlib',
+                'zipfile',
+                'shutil',
+                'tempfile',
+                'webbrowser',
+            ],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='unity-package-forge',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=False,
+            disable_windowed_traceback=False,
+            argv_emulation=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+            icon='ui/icon.ico' if Path('ui/icon.ico').exists() else None,
+        )
+        EOF
+
+    - name: Build executable
+      run: |
+        pyinstaller unity_package_forge.spec --clean --noconfirm
+
+    - name: Verify build
+      shell: bash
+      run: |
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          EXEC_PATH="dist/unity-package-forge.exe"
+        else
+          EXEC_PATH="dist/unity-package-forge"
+        fi
+        
+        if [ -f "$EXEC_PATH" ]; then
+          echo "✅ Executable created: $EXEC_PATH"
+          ls -la dist/
+        else
+          echo "❌ Executable not found"
+          ls -la dist/ || echo "dist/ não existe"
+          exit 1
+        fi
+
+    - name: Upload to release
+      if: needs.release.outputs.released == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/unity-package-forge${{ matrix.ext }}
+        tag_name: ${{ needs.release.outputs.tag_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: unity-package-forge-${{ matrix.name }}
+        path: dist/unity-package-forge${{ matrix.ext }}
+        retention-days: 30

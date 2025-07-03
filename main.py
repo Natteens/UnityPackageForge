@@ -11,13 +11,10 @@ from ui.strings import (
 )
 
 def setup_logging():
-    """Setup logging for debugging purposes"""
     if is_executable():
-        # In executable mode, log to file
         log_dir = os.path.dirname(sys.executable)
         log_file = os.path.join(log_dir, 'unity_package_forge.log')
     else:
-        # In development mode, log to project directory
         log_file = 'unity_package_forge.log'
     
     logging.basicConfig(
@@ -32,7 +29,6 @@ def setup_logging():
 
 
 def check_dependencies():
-    """Check if required dependencies are available"""
     missing_deps = []
     try:
         import requests
@@ -75,7 +71,6 @@ def start_gui():
 
     root.withdraw()
 
-    # Load icon using resource utilities
     try:
         icon_path = get_resource_path(os.path.join("ui", "icon.ico"))
         if os.path.exists(icon_path):
@@ -124,11 +119,9 @@ if __name__ == "__main__":
         logger = setup_logging()
         logger.info("Unity Package Forge starting...")
         
-        # Check dependencies first
         check_dependencies()
         logger.info("All dependencies verified")
         
-        # Start the GUI
         start_gui()
         
     except ImportError as e:
