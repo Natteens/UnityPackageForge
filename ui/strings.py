@@ -661,7 +661,7 @@ FILE_CHANGELOG = "CHANGELOG.md"
 FILE_LICENSE = "LICENSE.md"
 FILE_GITIGNORE = ".gitignore"
 FILE_RELEASERC = ".releaserc.json"
-FILE_RELEASE_WORKFLOW = "release.yml"
+FILE_RELEASE_WORKFLOW = "ci-cd.yml"
 
 # Common Unity Package IDs
 UNITY_PACKAGE_IDS = {
