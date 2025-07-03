@@ -2,6 +2,7 @@
 config.ini
 *.ini
 !config.ini.example
+!config.ini.safe
 
 # Arquivos de ambiente
 .env

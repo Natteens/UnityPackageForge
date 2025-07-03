@@ -13,6 +13,8 @@ a = Analysis(
         ('config', 'config'),
         ('config.ini', '.'),
         ('config.ini.example', '.'),
+        ('config.ini.safe', '.'),
+        ('icon.ico', 'ui'),
         ('requirements.txt', '.'),
     ],
     hiddenimports=[

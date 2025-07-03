@@ -1,18 +1,38 @@
 import configparser
 import os
+import shutil
+from pathlib import Path
 from utils.crypto_utils import get_crypto_instance
 from utils.resource_utils import ensure_config_file_exists, get_config_directory
 
 class ConfigManager:
     def __init__(self, config_file='config.ini'):
         self.config_file_name = config_file
-        self.config_file = ensure_config_file_exists(config_file)
+        self.config_file = self.ensure_config_file(config_file)
         self.config = configparser.ConfigParser()
         self.crypto = get_crypto_instance()
         self.sensitive_keys = {'token'}
         self.auto_save_enabled = True
         self.load_config()
-    
+
+    def ensure_config_file(self, config_file):
+        config_path = Path(config_file)
+        example_path = Path("config.ini.example")
+        safe_path = Path("config.ini.safe")
+
+        if not config_path.exists():
+            if safe_path.exists():
+                shutil.copy(safe_path, config_path)
+                print(f"Config.ini criado a partir de {safe_path}")
+            elif example_path.exists():
+                shutil.copy(example_path, config_path)
+                print(f"Config.ini criado a partir de {example_path}")
+            else:
+                config_path.touch()
+                print("Config.ini criado vazio")
+
+        return str(config_path)
+
     def load_config(self):
         if os.path.exists(self.config_file):
             self.config.read(self.config_file)

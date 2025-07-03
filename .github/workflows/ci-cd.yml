@@ -230,6 +230,18 @@ jobs:
         "@ | Out-File -FilePath "version_info.txt" -Encoding UTF8
       shell: powershell
 
+    - name: Prepare config files
+      run: |
+        cp config.ini.example config.ini.safe
+
+        if [ ! -f "config.ini" ]; then
+          cp config.ini.safe config.ini
+          echo "Criado config.ini a partir do exemplo seguro"
+        else
+          echo "config.ini já existe"
+        fi
+      shell: bash
+
     - name: Build executable
       run: |
         echo "Building Unity Package Forge..."
