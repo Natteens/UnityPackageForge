@@ -1,14 +1,22 @@
 import os
 import json
 from datetime import datetime
-from utils.version_utils import sanitize_name_for_repo, get_namespace_from_display_name, extract_package_name_from_full_name
+from utils.version_utils import sanitize_name_for_repo, get_namespace_from_display_name, \
+    extract_package_name_from_full_name
 from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON
+
 
 class PackageGenerator:
     def __init__(self, config_manager):
         self.config = config_manager
         self.log_callback = print
         self.progress_callback = None
+        self._reset_state()
+
+    def _reset_state(self):
+        """Reseta o estado interno do gerador"""
+        self._is_generating = False
+        self._current_operation = None
 
     def set_log_callback(self, callback):
         self.log_callback = callback
@@ -26,6 +34,10 @@ class PackageGenerator:
 
     def get_sanitized_repo_name(self, display_name):
         return sanitize_name_for_repo(display_name)
+
+    def is_busy(self):
+        """Verifica se o gerador está ocupado"""
+        return self._is_generating
 
     def get_package_json(self, name, display_name, description, version="0.1.0", unity_dependencies=None):
         company_prefix = self.config.get_value(key='company_prefix', default='com.example')
@@ -83,10 +95,18 @@ class PackageGenerator:
             json.dump(asmdef_data, f, indent=2)
 
     def create_package_structure(self, base_path, name, display_name, description, version="0.1.0",
-                                create_samples=True, create_runtime=True, create_editor=True,
-                                create_tests=True, create_github=True, license_type="MIT",
-                                unity_dependencies=None):
+                                 create_samples=True, create_runtime=True, create_editor=True,
+                                 create_tests=True, create_github=True, license_type="MIT",
+                                 unity_dependencies=None):
+
+        # Reset do estado e marca como ocupado
+        self._reset_state()
+        self._is_generating = True
+
         try:
+            self._current_operation = "Inicializando"
+            self.log(f"🚀 Iniciando criação do pacote '{display_name}'...")
+
             clean_name = extract_package_name_from_full_name(name)
             repo_name = self.get_sanitized_repo_name(display_name)
 
@@ -98,6 +118,7 @@ class PackageGenerator:
             else:
                 self.log(f"📁 Utilizando diretório existente: {package_folder_path}")
 
+            self._current_operation = "Criando package.json"
             self.update_progress(10, "Iniciando criação do pacote...")
 
             package_json = self.get_package_json(name, display_name, description, version, unity_dependencies)
@@ -108,6 +129,7 @@ class PackageGenerator:
             self.update_progress(20, "Arquivo package.json criado...")
 
             if create_runtime:
+                self._current_operation = "Criando estrutura Runtime"
                 runtime_path = os.path.join(package_folder_path, "Runtime")
                 os.makedirs(runtime_path, exist_ok=True)
 
@@ -120,6 +142,7 @@ class PackageGenerator:
                 self.log("📁 Pasta Runtime criada com .asmdef")
 
             if create_editor:
+                self._current_operation = "Criando estrutura Editor"
                 editor_path = os.path.join(package_folder_path, "Editor")
                 os.makedirs(editor_path, exist_ok=True)
 
@@ -135,24 +158,30 @@ class PackageGenerator:
             self.update_progress(40, "Estrutura de pastas criada...")
 
             if create_tests:
+                self._current_operation = "Criando testes"
                 self._create_tests_structure(package_folder_path, display_name)
                 self.update_progress(50, "Estrutura de testes criada...")
 
             if create_samples:
+                self._current_operation = "Criando samples"
                 self._create_samples_structure(package_folder_path, display_name)
                 self.update_progress(60, "Amostras criadas...")
 
+            self._current_operation = "Criando documentação"
             self._create_documentation(package_folder_path, display_name, description, repo_name)
             self.update_progress(70, "Documentação criada...")
 
             if license_type:
+                self._current_operation = "Criando licença"
                 self._create_license(package_folder_path, license_type, display_name)
                 self.update_progress(80, "Licença criada...")
 
             if create_github:
+                self._current_operation = "Criando arquivos GitHub"
                 self._create_github_files(package_folder_path, display_name, version)
                 self.update_progress(90, "Arquivos GitHub criados...")
 
+            self._current_operation = "Finalizando"
             self.update_progress(100, "Pacote criado com sucesso!")
             self.log(f"✅ Pacote '{display_name}' criado com sucesso em: {package_folder_path}")
 
@@ -160,12 +189,21 @@ class PackageGenerator:
 
         except Exception as e:
             self.log(f"❌ Erro ao criar pacote: {str(e)}")
+            self.log(f"❌ Operação atual: {self._current_operation}")
             raise
+        finally:
+            # IMPORTANTE: Sempre reseta o estado, mesmo em caso de erro
+            self._reset_state()
+            self.log("🔄 Gerador pronto para nova operação")
 
     def _create_file(self, path, content):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except Exception as e:
+            self.log(f"❌ Erro ao criar arquivo {path}: {str(e)}")
+            raise
 
     def _create_tests_structure(self, base_path, display_name):
         tests_path = os.path.join(base_path, "Tests")
@@ -285,4 +323,3 @@ class PackageGenerator:
         self._create_file(os.path.join(base_path, ".gitignore"), GITIGNORE_UNITY)
 
         self.log("🔧 Arquivos GitHub criados")
-

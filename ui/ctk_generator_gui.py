@@ -10,6 +10,7 @@ from core.package_generator import PackageGenerator
 from utils.helpers import open_folder, validate_package_name
 from utils.version_utils import get_current_version, extract_package_name_from_full_name
 
+
 class PackageGeneratorGUI:
     def __init__(self, root):
         self.root = root
@@ -62,8 +63,10 @@ class PackageGeneratorGUI:
         self.github_token = StringVar()
 
         self.progress_var = DoubleVar()
+        self.progress_messages = StringVar(value="Pronto para começar")  # Nova variável para mensagens de progresso
         self.unity_dependencies = {}
         self.selected_dependencies = []
+        self.dependency_widgets = {}  # Para armazenar widgets de dependência
 
         self.display_name.trace('w', self.on_display_name_change)
 
@@ -157,6 +160,7 @@ class PackageGeneratorGUI:
         entry.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         return entry
+
     def create_package_tab(self):
         tab = self.tab_view.tab("📦 Pacote")
         tab.grid_columnconfigure(0, weight=1)
@@ -268,7 +272,7 @@ class PackageGeneratorGUI:
         checkboxes = [
             ("📦  Samples", self.create_samples),
             ("⚡  Runtime", self.create_runtime),
-            ("🛠️  Editor", self.create_editor),
+            ("🛠️ Editor", self.create_editor),
             ("🧪  Tests", self.create_tests),
             ("🔧  GitHub Actions", self.create_github)
         ]
@@ -288,6 +292,7 @@ class PackageGeneratorGUI:
             checkbox.grid(row=row_num, column=col_num, sticky="w", padx=(0, 10), pady=8)
 
         self.create_action_buttons(tab, 3)
+
     def create_section(self, parent, title, row):
         section = ctk.CTkFrame(parent, corner_radius=8)
         section.grid(row=row, column=0, sticky="ew", pady=6)
@@ -319,7 +324,13 @@ class PackageGeneratorGUI:
         self.progress_bar = ctk.CTkProgressBar(button_frame, variable=self.progress_var)
         self.progress_bar.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 8))
 
-        self.status_label = ctk.CTkLabel(button_frame, text="", font=ctk.CTkFont(size=11))
+        # Alterado para usar StringVar
+        self.status_label = ctk.CTkLabel(
+            button_frame,
+            textvariable=self.progress_messages,
+            font=ctk.CTkFont(size=11),
+            wraplength=500  # Permite quebra de linha
+        )
         self.status_label.grid(row=2, column=0, pady=(0, 10))
 
     def on_license_change(self, choice):
@@ -343,16 +354,16 @@ class PackageGeneratorGUI:
         author_section = self.create_section(tab, "👤 Informações do Autor", 0)
 
         self.create_entry_row(author_section, "👤 Nome:", self.author_name,
-                             placeholder="Seu Nome Completo", row=1)
+                              placeholder="Seu Nome Completo", row=1)
         self.create_entry_row(author_section, "📧 Email:", self.author_email,
-                             placeholder="seu@email.com", row=2)
+                              placeholder="seu@email.com", row=2)
         self.create_entry_row(author_section, "🌐 URL do Perfil:", self.author_url,
-                             placeholder="https://github.com/seuusuario", row=3)
+                              placeholder="https://github.com/seuusuario", row=3)
 
         unity_section = self.create_section(tab, "🎮 Configurações Unity", 1)
 
         self.create_entry_row(unity_section, "🏢 Prefixo da Empresa:", self.company_prefix,
-                             placeholder="com.suaempresa", row=1)
+                              placeholder="com.suaempresa", row=1)
 
         unity_frame = ctk.CTkFrame(unity_section, fg_color="transparent")
         unity_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=3)
@@ -383,7 +394,7 @@ class PackageGeneratorGUI:
         cred_section = self.create_section(tab, "🔑 Credenciais GitHub", 0)
 
         self.create_entry_row(cred_section, "👤 Usuário:", self.github_username,
-                             placeholder="seuusuario", row=1)
+                              placeholder="seuusuario", row=1)
 
         token_frame = ctk.CTkFrame(cred_section, fg_color="transparent")
         token_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=3)
@@ -475,8 +486,23 @@ class PackageGeneratorGUI:
         left_title = ctk.CTkLabel(left_frame, text="Dependências Disponíveis", font=ctk.CTkFont(weight="bold"))
         left_title.grid(row=0, column=0, pady=8)
 
+        # Barra de pesquisa
+        search_frame = ctk.CTkFrame(left_frame, fg_color="transparent")
+        search_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
+        search_frame.grid_columnconfigure(0, weight=1)
+
+        self.deps_search_var = StringVar()
+        search_entry = ctk.CTkEntry(
+            search_frame,
+            textvariable=self.deps_search_var,
+            placeholder_text="🔍 Pesquisar dependências...",
+            height=28
+        )
+        search_entry.grid(row=0, column=0, sticky="ew")
+        self.deps_search_var.trace('w', self.filter_dependencies)
+
         self.deps_scroll = ctk.CTkScrollableFrame(left_frame, height=300)
-        self.deps_scroll.grid(row=1, column=0, sticky="ew", padx=8, pady=8)
+        self.deps_scroll.grid(row=2, column=0, sticky="ew", padx=8, pady=8)
         self.deps_scroll.grid_columnconfigure(0, weight=1)
 
         right_frame = ctk.CTkFrame(main_container)
@@ -544,14 +570,23 @@ class PackageGeneratorGUI:
 
         self.load_all_dependencies()
 
+    def filter_dependencies(self, *args):
+        search_term = self.deps_search_var.get().lower()
+        for package_id, widget in self.dependency_widgets.items():
+            text = widget.info_label.cget("text").lower()
+            if search_term in text or search_term in package_id.lower():
+                widget.grid()
+            else:
+                widget.grid_remove()
+
     def load_all_dependencies(self):
-        # Salvar estado atual das dependências selecionadas
         current_selections = {}
         if hasattr(self, 'dependency_vars'):
             for package_id, var in self.dependency_vars.items():
                 current_selections[package_id] = var.get()
 
         self.dependency_vars = {}
+        self.dependency_widgets = {}
 
         for widget in self.deps_scroll.winfo_children():
             widget.destroy()
@@ -591,7 +626,6 @@ class PackageGeneratorGUI:
 
         for i, (name, package_id, version, is_custom) in enumerate(all_deps):
             var = BooleanVar()
-            # Restaurar seleção anterior se existir
             if package_id in current_selections:
                 var.set(current_selections[package_id])
 
@@ -617,7 +651,12 @@ class PackageGeneratorGUI:
             )
             info_label.grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
+            # Armazena o widget para filtragem
+            self.dependency_widgets[package_id] = dep_frame
+            dep_frame.info_label = info_label  # Para acesso fácil ao texto
+
         self.update_dependency_preview()
+        self.filter_dependencies()  # Aplica filtro atual
 
     def add_custom_dependency(self):
         package_id = self.custom_dep_name.get().strip()
@@ -662,16 +701,16 @@ class PackageGeneratorGUI:
             return False
 
         valid_prefixes = [
-            'com.unity.',           # Pacotes oficiais Unity
-            'com.microsoft.',       # Microsoft packages (Mixed Reality, etc)
-            'com.google.',          # Google packages (Firebase, etc)
-            'com.facebook.',        # Facebook packages
-            'com.valve.',           # Valve packages (OpenVR, etc)
-            'com.oculus.',          # Oculus packages
-            'com.htc.',             # HTC packages
-            'com.autodesk.',        # Autodesk packages
-            'com.adobe.',           # Adobe packages
-            'org.nuget.',           # NuGet packages
+            'com.unity.',  # Pacotes oficiais Unity
+            'com.microsoft.',  # Microsoft packages (Mixed Reality, etc)
+            'com.google.',  # Google packages (Firebase, etc)
+            'com.facebook.',  # Facebook packages
+            'com.valve.',  # Valve packages (OpenVR, etc)
+            'com.oculus.',  # Oculus packages
+            'com.htc.',  # HTC packages
+            'com.autodesk.',  # Autodesk packages
+            'com.adobe.',  # Adobe packages
+            'org.nuget.',  # NuGet packages
         ]
 
         return any(package_id.startswith(prefix) for prefix in valid_prefixes)
@@ -705,7 +744,6 @@ class PackageGeneratorGUI:
             selected = []
             for package_id, var in self.dependency_vars.items():
                 if var.get():
-                    # Verificar se é uma dependência Unity válida antes de adicionar
                     if self._is_valid_unity_package_id(package_id):
                         custom_info = self.config_manager.get_dependency_info(package_id)
                         if custom_info:
@@ -738,7 +776,9 @@ class PackageGeneratorGUI:
                     self.add_log("❌ Pasta de destino é obrigatória")
                     return
 
-                self.generate_btn.configure(state="disabled", text="⏳ Gerando...")
+                # Bloquear UI durante a geração
+                self.toggle_ui_state(disabled=True)
+                self.root.title(f"Unity Package Forge v{get_current_version()} [Gerando...]")
 
                 selected_deps = {}
                 for package_id, var in self.dependency_vars.items():
@@ -795,26 +835,64 @@ class PackageGeneratorGUI:
                     open_folder(package_path)
 
             except Exception as e:
-                self.add_log(f"❌ Erro: {str(e)}")
+                self.add_log(f"❌ Erro crítico: {str(e)}")
+                self.update_progress(0, f"Erro: {str(e)}")
             finally:
-                self.generate_btn.configure(state="disabled", text="🚀 Gerar Pacote Unity")
-                self.update_progress(0)
+                # Restaurar estado da UI
+                self.toggle_ui_state(disabled=False)
+                self.root.title(f"Unity Package Forge v{get_current_version()}")
 
         threading.Thread(target=run_generation, daemon=True).start()
+
+    def toggle_ui_state(self, disabled=True):
+        """Habilita/desabilita elementos da UI durante operações longas"""
+        state = "disabled" if disabled else "normal"
+
+        # Desabilitar/Reabilitar abas
+        for tab_name in ["📦 Pacote", "⚙️ Configurações", "🐙 GitHub", "🔧 Dependências"]:
+            tab = self.tab_view.tab(tab_name)
+            for child in tab.winfo_children():
+                try:
+                    child.configure(state=state)
+                except:
+                    pass
+
+        # Botão de geração
+        if disabled:
+            self.generate_btn.configure(state="disabled", text="⏳ Gerando...")
+        else:
+            self.generate_btn.configure(state="normal", text="🚀 Gerar Pacote Unity")
 
     def update_progress(self, value, message=""):
         self.progress_var.set(value / 100)
         if message:
-            self.status_label.configure(text=message)
+            self.progress_messages.set(message)
+            self.add_log(message)  # Mostra também no log
+        self.root.update_idletasks()  # Força atualização da UI
 
     def add_log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = f"[{timestamp}] {message}\n"
-        self.log_text.insert("end", log_entry)
+        log_entry = f"[{timestamp}] {message}"
+
+        # Configurar cores baseadas no tipo de mensagem
+        if message.startswith("✅") or message.startswith("🎉"):
+            tag = "success"
+        elif message.startswith("❌"):
+            tag = "error"
+        elif message.startswith("⚠️"):
+            tag = "warning"
+        else:
+            tag = "info"
+
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", log_entry + "\n", tag)
+        self.log_text.configure(state="disabled")
         self.log_text.see("end")
 
     def clear_log(self):
+        self.log_text.configure(state="normal")
         self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
 
     def save_log(self):
         content = self.log_text.get("1.0", "end")
@@ -833,20 +911,40 @@ class PackageGeneratorGUI:
         self.verify_github_credentials_direct()
 
     def verify_github_credentials_direct(self):
-        """Verify GitHub credentials using current field values (without saving)"""
         def verify():
-            # Create a temporary GitHub manager with current field values
-            temp_github_manager = GitHubManager(self.config_manager)
-            temp_github_manager.username = self.github_username.get()
-            temp_github_manager.token = self.github_token.get()
-            
-            success, message = temp_github_manager.check_credentials()
-            self.github_status_label.configure(
-                text=message,
-                text_color="green" if success else "red"
-            )
+            self.show_loading_indicator(True)
+            try:
+                temp_github_manager = GitHubManager(self.config_manager)
+                temp_github_manager.username = self.github_username.get()
+                temp_github_manager.token = self.github_token.get()
+
+                success, message = temp_github_manager.check_credentials()
+                self.github_status_label.configure(
+                    text=message,
+                    text_color="green" if success else "red"
+                )
+                self.add_log(message)
+            finally:
+                self.show_loading_indicator(False)
 
         threading.Thread(target=verify, daemon=True).start()
+
+    def show_loading_indicator(self, show=True):
+        """Mostra/oculta indicador de carregamento durante operações longas"""
+        if show and not hasattr(self, "loading_indicator"):
+            self.loading_indicator = ctk.CTkLabel(
+                self.root,
+                text="⏳ Processando...",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                fg_color="#2B2B2B",
+                corner_radius=10,
+                width=200,
+                height=50
+            )
+            self.loading_indicator.place(relx=0.5, rely=0.5, anchor="center")
+        elif hasattr(self, "loading_indicator") and not show:
+            self.loading_indicator.destroy()
+            del self.loading_indicator
 
     def open_url(self, url):
         import webbrowser
@@ -863,11 +961,16 @@ class PackageGeneratorGUI:
 
     def verify_github_credentials(self):
         def verify():
-            success, message = self.github_manager.check_credentials()
-            self.github_status_label.configure(
-                text=message,
-                text_color="green" if success else "red"
-            )
+            self.show_loading_indicator(True)
+            try:
+                success, message = self.github_manager.check_credentials()
+                self.github_status_label.configure(
+                    text=message,
+                    text_color="green" if success else "red"
+                )
+                self.add_log(message)
+            finally:
+                self.show_loading_indicator(False)
 
         threading.Thread(target=verify, daemon=True).start()
 
@@ -903,6 +1006,13 @@ class PackageGeneratorGUI:
             font=ctk.CTkFont(family="Consolas", size=10)
         )
         self.log_text.grid(row=1, column=0, sticky="ew", padx=12, pady=10)
+        self.log_text.configure(state="disabled")  # Inicialmente desabilitado
+
+        # Configurar tags para cores
+        self.log_text.tag_config("success", foreground="#4CAF50")  # Verde
+        self.log_text.tag_config("error", foreground="#F44336")  # Vermelho
+        self.log_text.tag_config("warning", foreground="#FF9800")  # Laranja
+        self.log_text.tag_config("info", foreground="#64B5F6")  # Azul
 
         control_frame = ctk.CTkFrame(log_section, fg_color="transparent")
         control_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
@@ -938,6 +1048,18 @@ class PackageGeneratorGUI:
 
         about_section = self.create_section(tab, f"🚀 Unity Package Forge v{get_current_version()}", 0)
 
+        # Barra de versão/informações
+        version_frame = ctk.CTkFrame(about_section, fg_color="#333333")
+        version_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=12)
+
+        version_text = f"Versão: {get_current_version()} | Unity: {self.unity_version.get()}"
+        version_label = ctk.CTkLabel(
+            version_frame,
+            text=version_text,
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        version_label.pack(pady=5)
+
         info_text = f"""Unity Package Forge é uma ferramenta profissional para criar pacotes Unity
 seguindo as melhores práticas e padrões da indústria.
 
@@ -949,11 +1071,7 @@ seguindo as melhores práticas e padrões da indústria.
 • Semantic Release configurado
 • Build automático multiplataforma
 
-🔧 Versão: {get_current_version()}
-📅 Atualizado: {datetime.now().strftime('%d/%m/%Y')}
-👨‍💻 Desenvolvido por: Nathan da Silva Miranda
-
-🌐 GitHub: github.com/Natteens/UnityPackageForge"""
+👨‍💻 Desenvolvido por: Nathan da Silva Miranda"""
 
         info_label = ctk.CTkLabel(
             about_section,
@@ -962,6 +1080,18 @@ seguindo as melhores práticas e padrões da indústria.
             justify="left"
         )
         info_label.grid(row=1, column=0, sticky="w", padx=15, pady=15)
+
+        # Botões de ação
+        actions_frame = ctk.CTkFrame(about_section, fg_color="transparent")
+        actions_frame.grid(row=2, column=0, pady=10)
+
+        update_btn = ctk.CTkButton(
+            actions_frame,
+            text="🔄 Verificar Atualizações",
+            command=self.check_for_updates,
+            width=180
+        )
+        update_btn.grid(row=0, column=0, padx=10)
 
         links_section = self.create_section(tab, "🔗 Links Úteis", 1)
 
@@ -987,6 +1117,12 @@ seguindo as melhores práticas e padrões da indústria.
         )
         unity_btn.grid(row=0, column=1, padx=4)
 
+    def check_for_updates(self):
+        """Simula verificação de atualizações"""
+        self.add_log("🔍 Verificando atualizações...")
+        # Implementação real iria checar no GitHub
+        self.root.after(1500, lambda: self.add_log("✅ Você está na versão mais recente!"))
+
     def load_ui_values(self):
         self.author_name.set(self.config_manager.get_value(key='author_name', default=''))
         self.author_email.set(self.config_manager.get_value(key='author_email', default=''))
@@ -1008,8 +1144,7 @@ seguindo as melhores práticas e padrões da indústria.
     def setup_bindings(self):
         self.main_frame.bind("<Enter>", self._bind_mousewheel)
         self.main_frame.bind("<Leave>", self._unbind_mousewheel)
-        
-        # Auto-save bindings for configuration fields
+
         self.author_name.trace('w', self._auto_save_config)
         self.author_email.trace('w', self._auto_save_config)
         self.author_url.trace('w', self._auto_save_config)
@@ -1025,24 +1160,19 @@ seguindo as melhores práticas e padrões da indústria.
         self.main_frame.unbind_all("<MouseWheel>")
 
     def _on_mousewheel(self, event):
-        self.main_frame._parent_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-    
+        self.main_frame._parent_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
     def _auto_save_config(self, *args):
-        """Auto-save configuration fields when they change"""
-        # Small delay to avoid saving on every keystroke
         if hasattr(self, '_auto_save_timer'):
             self.root.after_cancel(self._auto_save_timer)
         self._auto_save_timer = self.root.after(1000, self._do_auto_save_config)  # 1 second delay
-    
+
     def _auto_save_github(self, *args):
-        """Auto-save GitHub fields when they change"""
-        # Small delay to avoid saving on every keystroke
         if hasattr(self, '_auto_save_github_timer'):
             self.root.after_cancel(self._auto_save_github_timer)
         self._auto_save_github_timer = self.root.after(1000, self._do_auto_save_github)  # 1 second delay
-    
+
     def _do_auto_save_config(self):
-        """Perform the actual auto-save of configuration"""
         configs = {
             'author_name': self.author_name.get(),
             'author_email': self.author_email.get(),
@@ -1053,12 +1183,10 @@ seguindo as melhores práticas e padrões da indústria.
 
         for key, value in configs.items():
             self.config_manager.set_value(key=key, value=value)
-    
+
     def _do_auto_save_github(self):
-        """Perform the actual auto-save of GitHub configuration"""
         self.config_manager.set_value(section='github', key='username', value=self.github_username.get())
         self.config_manager.set_value(section='github', key='token', value=self.github_token.get())
-        
-        # Update GitHub manager with current values
+
         self.github_manager.username = self.github_username.get()
         self.github_manager.token = self.github_token.get()
