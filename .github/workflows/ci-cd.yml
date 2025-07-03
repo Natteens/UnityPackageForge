@@ -126,8 +126,8 @@ jobs:
           echo "ℹ️ No release created"
         fi
 
-  buield:
-    neds: [test, release]
+  build:
+    needs: [test, release]
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.os }}
     strategy:
