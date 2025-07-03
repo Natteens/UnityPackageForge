@@ -1,33 +1,25 @@
 {
   "name": "unity-package-forge",
   "version": "1.0.0",
-  "description": "Unity Package Forge - Gerador profissional de pacotes Unity",
+  "description": "Unity Package Forge",
   "main": "main.py",
-  "scripts": {
-    "build": "pyinstaller unity_package_forge.spec --clean",
-    "test": "python -c \"import main; print('✅ Main import OK')\""
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Natteens/UnityPackageForge.git"
   },
   "keywords": [
     "unity",
-    "unity3d",
     "package",
-    "generator",
-    "gamedev"
+    "generator"
   ],
-  "author": "Nathan da Silva Miranda <natteens@gmail.com>",
+  "author": "Nathan da Silva Miranda",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/Natteens/UnityPackageForge/issues"
-  },
-  "homepage": "https://github.com/Natteens/UnityPackageForge#readme",
   "devDependencies": {
-    "@semantic-release/commit-analyzer": "^10.0.0",
-    "@semantic-release/github": "^9.0.0",
-    "@semantic-release/release-notes-generator": "^11.0.0",
-    "semantic-release": "^21.0.0"
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.3",
+    "@semantic-release/release-notes-generator": "^14.0.3",
+    "semantic-release": "^24.2.6"
   }
 }

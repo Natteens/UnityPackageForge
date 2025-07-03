@@ -1,3 +1,10 @@
+## [1.2.13](https://github.com/Natteens/UnityPackageForge/compare/v1.2.12...v1.2.13) (2025-07-03)
+
+
+### Bug Fixes
+
+* workflow ([b4f48b1](https://github.com/Natteens/UnityPackageForge/commit/b4f48b1c4aa9b6b76f8615b0d170e6345d0178c6))
+
 ## [1.2.12](https://github.com/Natteens/UnityPackageForge/compare/v1.2.11...v1.2.12) (2025-07-03)
 
 
