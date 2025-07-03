@@ -164,76 +164,58 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Build executable
+    - name: Verify files exist
       shell: bash
       run: |
-        pyinstaller main.py \
-          --name unity-package-forge \
-          --onefile \
-          --noconsole \
-          --clean \
-          --noconfirm \
-          --hidden-import customtkinter \
-          --hidden-import requests \
-          --hidden-import cryptography \
-          --hidden-import PIL \
-          --hidden-import PIL._tkinter_finder \
-          --hidden-import tkinter \
-          --hidden-import tkinter.filedialog \
-          --hidden-import tkinter.messagebox \
-          --hidden-import json \
-          --hidden-import os \
-          --hidden-import sys \
-          --hidden-import logging \
-          --hidden-import configparser \
-          --hidden-import datetime \
-          --hidden-import pathlib \
-          --hidden-import subprocess \
-          --hidden-import threading \
-          --hidden-import urllib.request \
-          --hidden-import urllib.parse \
-          --hidden-import base64 \
-          --hidden-import hashlib \
-          --hidden-import zipfile \
-          --hidden-import shutil \
-          --hidden-import tempfile \
-          --hidden-import webbrowser
-
-    - name: Add resources to executable
-      shell: bash
-      run: |
+        echo "=== Checking project structure ==="
+        ls -la
+        echo "=== Checking for UI directory ==="
         if [ -d "ui" ]; then
-          echo "UI directory found, resources will be included in the executable"
+          echo "UI directory found:"
+          ls -la ui/
+        else
+          echo "UI directory not found"
         fi
-        if [ -d "config" ]; then
-          echo "Config directory found, resources will be included in the executable"
-        fi
-        if [ -f "README.md" ]; then
-          echo "README.md found"
-        fi
-        if [ -f "LICENSE" ]; then
-          echo "LICENSE found"
+        echo "=== Checking for config files ==="
+        if [ -f "config.ini.example" ]; then
+          echo "config.ini.example found"
+        else
+          echo "config.ini.example not found"
         fi
 
     - name: Build executable
-      run: |
-        pyinstaller unity_package_forge.spec --clean --noconfirm
-
-    - name: Verify build
       shell: bash
       run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          EXEC_PATH="dist/unity-package-forge.exe"
-        else
-          EXEC_PATH="dist/unity-package-forge"
-        fi
-        
-        if [ -f "$EXEC_PATH" ]; then
-          echo "✅ Executable created: $EXEC_PATH"
+        echo "=== Starting PyInstaller build ==="
+        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
+
+    - name: Verify build output
+      shell: bash
+      run: |
+        echo "=== Checking build output ==="
+        if [ -d "dist" ]; then
+          echo "Dist directory contents:"
           ls -la dist/
+          
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            EXEC_PATH="dist/unity-package-forge.exe"
+          else
+            EXEC_PATH="dist/unity-package-forge"
+          fi
+          
+          if [ -f "$EXEC_PATH" ]; then
+            echo "✅ Executable created successfully: $EXEC_PATH"
+            echo "File size: $(du -h "$EXEC_PATH" | cut -f1)"
+          else
+            echo "❌ Executable not found at: $EXEC_PATH"
+            echo "Available files in dist:"
+            find dist -type f -name "*" || echo "No files found in dist"
+            exit 1
+          fi
         else
-          echo "❌ Executable not found"
-          ls -la dist/ || echo "dist/ não existe"
+          echo "❌ Dist directory not found"
+          echo "Build directory contents:"
+          ls -la build/ || echo "Build directory not found"
           exit 1
         fi
 

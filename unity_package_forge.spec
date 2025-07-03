@@ -3,21 +3,24 @@
 import os
 import sys
 
-# Add the project root to Python path
 project_root = os.path.dirname(os.path.abspath(SPEC))
 sys.path.insert(0, project_root)
 
 block_cipher = None
 
-# Define data files to include
-datas = [
-    ('ui/icon.ico', 'ui'),
-    ('config.ini.example', '.'),
-    ('README.md', '.'),
-    ('LICENSE.md', '.'),
-]
+datas = []
 
-# Define hidden imports (modules that PyInstaller might miss)
+if os.path.exists('ui/icon.ico'):
+    datas.append(('ui/icon.ico', 'ui'))
+if os.path.exists('config.ini.example'):
+    datas.append(('config.ini.example', '.'))
+if os.path.exists('README.md'):
+    datas.append(('README.md', '.'))
+if os.path.exists('LICENSE.md'):
+    datas.append(('LICENSE.md', '.'))
+elif os.path.exists('LICENSE'):
+    datas.append(('LICENSE', '.'))
+
 hidden_imports = [
     'customtkinter',
     'requests',
@@ -82,12 +85,10 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # Set to False for windowed mode
-    disable_windowing_subsystem=False,
+    console=False,
+    disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='ui/icon.ico',
-    version='version_info.txt',  # Will be created by workflow if needed
-    manifest='unity_package_forge.manifest',  # Windows manifest
+    icon='ui/icon.ico' if os.path.exists('ui/icon.ico') else None,
 )
