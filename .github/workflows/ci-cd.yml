@@ -165,6 +165,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Build executable
+      shell: bash
       run: |
         pyinstaller main.py \
           --name unity-package-forge \
