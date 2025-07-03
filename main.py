@@ -1,35 +1,69 @@
 import sys
 import os
-import subprocess
+import logging
 import customtkinter as ctk
 from ui.ctk_generator_gui import PackageGeneratorGUI
 from utils.version_utils import get_current_version
+from utils.resource_utils import get_resource_path, is_executable
 from ui.strings import (
     APP_GEOMETRY, APP_MIN_SIZE, APP_APPEARANCE_MODE, APP_COLOR_THEME,
     ERROR_APP_INITIALIZATION, ERROR_ICON_LOAD, PROMPT_PRESS_ENTER
 )
 
-def install_dependencies():
-    required_packages = ['requests', 'customtkinter']
-    missing_packages = []
+def setup_logging():
+    """Setup logging for debugging purposes"""
+    if is_executable():
+        # In executable mode, log to file
+        log_dir = os.path.dirname(sys.executable)
+        log_file = os.path.join(log_dir, 'unity_package_forge.log')
+    else:
+        # In development mode, log to project directory
+        log_file = 'unity_package_forge.log'
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    return logging.getLogger(__name__)
 
-    for package in required_packages:
-        try:
-            __import__(package)
-        except ImportError:
-            missing_packages.append(package)
 
-    if missing_packages:
-        print(f"Instalando dependências: {', '.join(missing_packages)}")
-        
-        import sys
-        kwargs = {}
-        if sys.platform == "win32":
-            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-        
-        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages, **kwargs)
+def check_dependencies():
+    """Check if required dependencies are available"""
+    missing_deps = []
+    try:
+        import requests
+    except ImportError:
+        missing_deps.append('requests')
+    
+    try:
+        import customtkinter
+    except ImportError:
+        missing_deps.append('customtkinter')
+    
+    try:
+        import cryptography
+    except ImportError:
+        missing_deps.append('cryptography')
+    
+    if missing_deps:
+        error_msg = f"Dependências críticas não encontradas: {', '.join(missing_deps)}"
+        if is_executable():
+            error_msg += "\n\nEste executável pode estar corrompido. Faça o download novamente."
+        else:
+            error_msg += f"\n\nInstale com: pip install {' '.join(missing_deps)}"
+        raise ImportError(error_msg)
+    
+    return True
 
 def start_gui():
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting Unity Package Forge v{get_current_version()}")
+    logger.info(f"Running as executable: {is_executable()}")
+    
     ctk.set_appearance_mode(APP_APPEARANCE_MODE)
     ctk.set_default_color_theme(APP_COLOR_THEME)
 
@@ -41,11 +75,16 @@ def start_gui():
 
     root.withdraw()
 
+    # Load icon using resource utilities
     try:
-        icon_path = os.path.join(os.path.dirname(__file__), "ui", "icon.ico")
+        icon_path = get_resource_path(os.path.join("ui", "icon.ico"))
         if os.path.exists(icon_path):
             root.iconbitmap(icon_path)
+            logger.info(f"Icon loaded from: {icon_path}")
+        else:
+            logger.warning(f"Icon not found at: {icon_path}")
     except Exception as e:
+        logger.error(ERROR_ICON_LOAD.format(error=str(e)))
         print(ERROR_ICON_LOAD.format(error=str(e)))
 
     app = PackageGeneratorGUI(root)
@@ -71,12 +110,39 @@ def start_gui():
 
     root.after(50, center_and_show)
 
-    root.mainloop()
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        logger.info("Application interrupted by user")
+    except Exception as e:
+        logger.error(f"Unexpected error during GUI execution: {str(e)}", exc_info=True)
+        raise
 
 if __name__ == "__main__":
+    logger = None
     try:
-        install_dependencies()
+        logger = setup_logging()
+        logger.info("Unity Package Forge starting...")
+        
+        # Check dependencies first
+        check_dependencies()
+        logger.info("All dependencies verified")
+        
+        # Start the GUI
         start_gui()
-    except Exception as e:
-        print(ERROR_APP_INITIALIZATION.format(error=str(e)))
+        
+    except ImportError as e:
+        error_msg = f"Erro de dependências: {str(e)}"
+        print(error_msg)
+        if logger:
+            logger.error(error_msg)
         input(PROMPT_PRESS_ENTER)
+        sys.exit(1)
+        
+    except Exception as e:
+        error_msg = ERROR_APP_INITIALIZATION.format(error=str(e))
+        print(error_msg)
+        if logger:
+            logger.error(error_msg, exc_info=True)
+        input(PROMPT_PRESS_ENTER)
+        sys.exit(1)
