@@ -14,7 +14,7 @@ a = Analysis(
         ('config.ini', '.'),
         ('config.ini.example', '.'),
         ('config.ini.safe', '.'),
-        ('icon.ico', 'ui'),
+        ('ui/icon.ico', 'ui'),
         ('requirements.txt', '.'),
     ],
     hiddenimports=[
