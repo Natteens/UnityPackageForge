@@ -1,3 +1,10 @@
+## [1.2.11](https://github.com/Natteens/UnityPackageForge/compare/v1.2.10...v1.2.11) (2025-07-03)
+
+
+### Bug Fixes
+
+* cicd ([f76b7ba](https://github.com/Natteens/UnityPackageForge/commit/f76b7ba75dad56291c2bd1b42ad5a4a5baf14e55))
+
 ## [1.2.6](https://github.com/Natteens/UnityPackageForge/compare/v1.2.5...v1.2.6) (2025-07-02)
 
 
