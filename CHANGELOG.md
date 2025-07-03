@@ -1,3 +1,10 @@
+## [1.2.14](https://github.com/Natteens/UnityPackageForge/compare/v1.2.13...v1.2.14) (2025-07-03)
+
+
+### Bug Fixes
+
+* api ([66c9dcf](https://github.com/Natteens/UnityPackageForge/commit/66c9dcfbecb3d235a9f5222d5fab95e3ccf8f98b))
+
 ## [1.2.13](https://github.com/Natteens/UnityPackageForge/compare/v1.2.12...v1.2.13) (2025-07-03)
 
 
