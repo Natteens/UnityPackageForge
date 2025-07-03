@@ -26,9 +26,9 @@ for src, dst in essential_files:
     src_path = project_root / src
     if src_path.exists():
         datas.append((str(src_path), dst))
-        print(f"✅ Including: {src} -> {dst}")
+        print("[OK] Including: {} -> {}".format(src, dst))
     else:
-        print(f"⚠️ Missing: {src}")
+        print("[WARNING] Missing: {}".format(src))
 
 # Imports ocultos necessários
 hidden_imports = [
@@ -109,7 +109,7 @@ excludes = [
     'PySide6',
 ]
 
-print("🔍 Scanning for Python modules...")
+print("[CHECK] Scanning for Python modules...")
 
 a = Analysis(
     ['main.py'],
@@ -127,11 +127,11 @@ a = Analysis(
     noarchive=False,
 )
 
-print("📦 Creating PYZ archive...")
+print("[PACKAGE] Creating PYZ archive...")
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-print("🔨 Building executable...")
+print("[BUILD] Building executable...")
 
 # Configurações do executável
 exe_kwargs = {
@@ -160,15 +160,15 @@ if sys.platform.startswith('win'):
     exe_kwargs['icon'] = str(project_root / 'ui' / 'icon.ico') if (project_root / 'ui' / 'icon.ico').exists() else None
     exe_kwargs['version'] = 'version_info.txt' if Path('version_info.txt').exists() else None
     exe_kwargs['manifest'] = str(project_root / 'unity_package_forge.manifest') if (project_root / 'unity_package_forge.manifest').exists() else None
-    print(f"🪟 Windows build - Icon: {exe_kwargs['icon']}, Version: {exe_kwargs['version']}")
+    print("[WIN] Windows build - Icon: {}, Version: {}".format(exe_kwargs['icon'], exe_kwargs['version']))
 
 elif sys.platform.startswith('darwin'):
     exe_kwargs['icon'] = str(project_root / 'ui' / 'icon.icns') if (project_root / 'ui' / 'icon.icns').exists() else None
-    print(f"🍎 macOS build - Icon: {exe_kwargs['icon']}")
+    print("[MAC] macOS build - Icon: {}".format(exe_kwargs['icon']))
 
 else:  # Linux
-    print("🐧 Linux build")
+    print("[LINUX] Linux build")
 
 exe = EXE(**exe_kwargs)
 
-print("✅ Build configuration complete!")
+print("[OK] Build configuration complete!")

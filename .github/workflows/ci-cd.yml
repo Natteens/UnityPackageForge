@@ -26,7 +26,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y python3-tk xvfb
+        sudo apt-get install -y python3-tk
 
     - name: Install Python dependencies
       run: |
@@ -35,7 +35,7 @@ jobs:
 
     - name: Test imports
       run: |
-        xvfb-run -a python -c "
+        python -c "
         import sys
         sys.path.insert(0, '.')
         try:
@@ -69,12 +69,13 @@ jobs:
       with:
         node-version: '20'
 
-    - name: Create semantic-release config
+    - name: Create release configuration
       run: |
+        # Criar package.json
         cat > package.json << 'EOF'
         {
           "name": "unity-package-forge",
-          "version": "0.0.0-development",
+          "version": "1.0.0",
           "description": "Unity Package Forge",
           "main": "main.py",
           "repository": {
@@ -87,27 +88,20 @@ jobs:
         }
         EOF
 
+        # Criar configuração do semantic-release
         cat > .releaserc.json << 'EOF'
         {
-          "branches": [
-            "main"
-          ],
+          "branches": ["main"],
           "plugins": [
             "@semantic-release/commit-analyzer",
             "@semantic-release/release-notes-generator",
-            [
-              "@semantic-release/changelog",
-              {
-                "changelogFile": "CHANGELOG.md"
-              }
-            ],
-            [
-              "@semantic-release/git",
-              {
-                "assets": ["CHANGELOG.md"],
-                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
-              }
-            ],
+            ["@semantic-release/changelog", {
+              "changelogFile": "CHANGELOG.md"
+            }],
+            ["@semantic-release/git", {
+              "assets": ["CHANGELOG.md", "package.json"],
+              "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+            }],
             "@semantic-release/github"
           ]
         }
@@ -115,50 +109,34 @@ jobs:
 
     - name: Install semantic-release
       run: |
-        npm install -g semantic-release@21 \
-          @semantic-release/commit-analyzer@10 \
-          @semantic-release/release-notes-generator@11 \
-          @semantic-release/changelog@6 \
-          @semantic-release/git@10 \
-          @semantic-release/github@9
+        npm install --save-dev semantic-release @semantic-release/github @semantic-release/changelog @semantic-release/git @semantic-release/commit-analyzer @semantic-release/release-notes-generator
 
-    - name: Release
+    - name: Run semantic-release
       id: release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Captura output do semantic-release
-        npx semantic-release --dry-run > release_output.txt 2>&1 || true
+        # Executar semantic-release e capturar saída
+        npx semantic-release --dry-run=false
         
-        # Verifica se uma nova release será criada
-        if grep -q "Published release" release_output.txt || ! grep -q "no release" release_output.txt; then
-          # Executa o release real
-          npx semantic-release
-          
-          # Pega a nova tag
-          NEW_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
-          if [ -n "$NEW_TAG" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "tag_name=${NEW_TAG}" >> $GITHUB_OUTPUT
-            echo "version=${NEW_TAG#v}" >> $GITHUB_OUTPUT
-            echo "✅ New release created: ${NEW_TAG}"
-          else
-            echo "released=false" >> $GITHUB_OUTPUT
-            echo "tag_name=" >> $GITHUB_OUTPUT
-            echo "version=1.0.0" >> $GITHUB_OUTPUT
-            echo "ℹ️ No new release created"
-          fi
+        # Verificar se uma nova tag foi criada
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        
+        if [ -n "$LATEST_TAG" ]; then
+          echo "released=true" >> $GITHUB_OUTPUT
+          echo "tag_name=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+          echo "✅ New release created: $LATEST_TAG"
         else
           echo "released=false" >> $GITHUB_OUTPUT
-          echo "tag_name=" >> $GITHUB_OUTPUT  
+          echo "tag_name=" >> $GITHUB_OUTPUT
           echo "version=1.0.0" >> $GITHUB_OUTPUT
-          echo "ℹ️ No release needed"
+          echo "ℹ️ No new release created"
         fi
 
   build:
     needs: [test, release]
-    if: always() && needs.test.result == 'success' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -168,11 +146,11 @@ jobs:
             name: windows
             ext: .exe
             artifact_name: unity-package-forge-windows.exe
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             name: linux
             ext: ''
             artifact_name: unity-package-forge-linux
-          - os: macos-12
+          - os: macos-latest
             name: macos
             ext: ''
             artifact_name: unity-package-forge-macos
@@ -188,14 +166,14 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install system dependencies (Linux)
-      if: matrix.os == 'ubuntu-20.04'
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y python3-tk xvfb
+        sudo apt-get install -y python3-tk
 
     - name: Install system dependencies (macOS)
-      if: matrix.os == 'macos-12'
+      if: matrix.os == 'macos-latest'
       run: |
         brew install python-tk
 
@@ -207,10 +185,9 @@ jobs:
 
     - name: Create version info for Windows
       if: matrix.os == 'windows-latest'
-      shell: powershell
       run: |
         $version = "${{ needs.release.outputs.version }}"
-        if (-not $version -or $version -eq "") { $version = "1.0.0" }
+        if ([string]::IsNullOrEmpty($version)) { $version = "1.0.0" }
         
         $versionParts = $version.Split('.')
         $major = [int]$versionParts[0]
@@ -251,113 +228,109 @@ jobs:
           ]
         )
         "@ | Out-File -FilePath "version_info.txt" -Encoding UTF8
-
-    - name: Update spec file
-      shell: bash
-      run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          # Atualiza o spec para usar version_file no Windows
-          sed -i 's/version_file=None/version_file="version_info.txt"/' unity_package_forge.spec
-        fi
-        
-        echo "Building version: ${{ needs.release.outputs.version }}"
+      shell: powershell
 
     - name: Build executable
-      shell: bash
       run: |
-        echo "=== Starting PyInstaller build ==="
-        echo "Current directory: $(pwd)"
-        echo "Python version: $(python --version)"
-        echo "PyInstaller version: $(pyinstaller --version)"
+        echo "Building Unity Package Forge..."
+        echo "Version: ${{ needs.release.outputs.version }}"
+        echo "OS: ${{ matrix.os }}"
         
-        # Build com verbose para debug
-        if [ "${{ matrix.os }}" = "ubuntu-20.04" ]; then
-          xvfb-run -a pyinstaller unity_package_forge.spec --clean --noconfirm --log-level DEBUG
-        else
-          pyinstaller unity_package_forge.spec --clean --noconfirm --log-level DEBUG
+        # Verificar se o arquivo spec existe
+        if [ ! -f "unity_package_forge.spec" ]; then
+          echo "❌ Spec file not found!"
+          exit 1
         fi
-
-    - name: Verify and rename executable
+        
+        # Construir o executável
+        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
       shell: bash
+
+    - name: Verify and prepare build
       run: |
-        echo "=== Checking build output ==="
+        echo "=== Verificando saída da build ==="
         
         if [ ! -d "dist" ]; then
-          echo "❌ Dist directory not found"
+          echo "❌ Diretório dist não encontrado!"
           exit 1
         fi
         
-        echo "Dist directory contents:"
+        echo "Conteúdo do diretório dist:"
         ls -la dist/
         
-        # Encontra o executável criado
+        # Localizar o executável
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          BUILT_EXEC="dist/unity-package-forge.exe"
+          EXEC_NAME="unity-package-forge.exe"
         else
-          BUILT_EXEC="dist/unity-package-forge"
+          EXEC_NAME="unity-package-forge"
         fi
         
-        if [ -f "$BUILT_EXEC" ]; then
-          echo "✅ Executable found: $BUILT_EXEC"
-          echo "File size: $(du -h "$BUILT_EXEC" | cut -f1)"
+        EXEC_PATH="dist/$EXEC_NAME"
+        
+        if [ -f "$EXEC_PATH" ]; then
+          echo "✅ Executável encontrado: $EXEC_PATH"
           
-          # Renomeia para o nome final
-          mv "$BUILT_EXEC" "dist/${{ matrix.artifact_name }}"
-          echo "✅ Renamed to: dist/${{ matrix.artifact_name }}"
+          # Verificar tamanho
+          SIZE=$(du -h "$EXEC_PATH" | cut -f1)
+          echo "Tamanho: $SIZE"
           
-          # Testa o executável (básico)
-          if [ "${{ matrix.os }}" != "macos-12" ]; then
-            echo "Testing executable..."
-            if [ "${{ matrix.os }}" = "ubuntu-20.04" ]; then
-              timeout 10s xvfb-run -a "dist/${{ matrix.artifact_name }}" --version || echo "Test completed"
-            else
-              timeout 10s "dist/${{ matrix.artifact_name }}" --version || echo "Test completed"
-            fi
+          # Renomear para o nome final
+          mv "$EXEC_PATH" "dist/${{ matrix.artifact_name }}"
+          echo "✅ Renomeado para: ${{ matrix.artifact_name }}"
+          
+          # Tornar executável no Linux/macOS
+          if [ "${{ matrix.os }}" != "windows-latest" ]; then
+            chmod +x "dist/${{ matrix.artifact_name }}"
+            echo "✅ Permissões de execução definidas"
           fi
-          
         else
-          echo "❌ Executable not found at: $BUILT_EXEC"
-          echo "Available files in dist:"
-          find dist -type f -name "*" || echo "No files found"
+          echo "❌ Executável não encontrado!"
+          echo "Procurando por arquivos na pasta dist:"
+          find dist -type f -name "*" || echo "Nenhum arquivo encontrado"
           exit 1
         fi
+      shell: bash
 
-    - name: Upload to release (if released)
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: dist/${{ matrix.artifact_name }}
+        retention-days: 30
+
+    - name: Upload to GitHub Release
       if: needs.release.outputs.released == 'true'
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: dist/${{ matrix.artifact_name }}
         tag_name: ${{ needs.release.outputs.tag_name }}
+        name: Release ${{ needs.release.outputs.tag_name }}
         body: |
-          ## 📦 Unity Package Forge ${{ needs.release.outputs.tag_name }}
-          
-          ### 📥 Downloads
-          
+          ## 🚀 Unity Package Forge ${{ needs.release.outputs.tag_name }}
+
+          ### Download executáveis:
+
           - 🪟 **Windows**: [unity-package-forge-windows.exe](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-windows.exe)
           - 🐧 **Linux**: [unity-package-forge-linux](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-linux)  
           - 🍎 **macOS**: [unity-package-forge-macos](https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag_name }}/unity-package-forge-macos)
-          
-          ### 🚀 Como usar
-          
-          1. Baixe o executável para seu sistema operacional
-          2. No Windows/Linux: Execute diretamente
-          3. No macOS: Talvez seja necessário permitir em Configurações > Segurança
-          
-          ### ⚠️ Aviso do Windows Defender
-          
-          Como o executável não possui assinatura digital, o Windows Defender pode mostrar um aviso. Isso é normal para aplicações não assinadas. Para continuar:
-          
-          1. Clique em "Mais informações" 
-          2. Clique em "Executar mesmo assim"
-          
-          Ou adicione uma exceção no Windows Defender para a pasta onde baixou o arquivo.
+
+          ### Instalação:
+
+          **Windows**: Baixe o `.exe` e execute. Se o Windows Defender bloquear, clique em "Mais informações" → "Executar mesmo assim".
+
+          **Linux**: 
+          ```bash
+          chmod +x unity-package-forge-linux
+          ./unity-package-forge-linux
+          ```
+
+          **macOS**: 
+          ```bash
+          chmod +x unity-package-forge-macos
+          ./unity-package-forge-macos
+          ```
+
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: unity-package-forge-${{ matrix.name }}
-        path: dist/${{ matrix.artifact_name }}
-        retention-days: 90
-        compression-level: 6
