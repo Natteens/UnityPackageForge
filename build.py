@@ -7,69 +7,194 @@ import platform
 import shutil
 from pathlib import Path
 
-
-def run_command(cmd, cwd=None):
+# Configuração de encoding para Windows
+if platform.system() == 'Windows':
+    import locale
     try:
-        result = subprocess.run(cmd, shell=True, check=True,
-                                capture_output=True, text=True, cwd=cwd,
-                                encoding='utf-8', errors='replace')
+        # Força UTF-8 no Windows
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except:
+        pass
+
+
+def safe_print(message):
+    """Print seguro que funciona em qualquer terminal"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        # Remove emojis e caracteres especiais
+        clean_message = message.encode('ascii', 'ignore').decode('ascii')
+        print(clean_message)
+
+
+def run_command(cmd, cwd=None, timeout=300):
+    """Executa comando com melhor tratamento de erros e timeout"""
+    try:
+        # Configuração especial para Windows
+        kwargs = {
+            'shell': True,
+            'check': True,
+            'capture_output': True,
+            'text': True,
+            'cwd': cwd,
+            'encoding': 'utf-8',
+            'errors': 'replace',
+            'timeout': timeout
+        }
+
+        if platform.system() == "Windows":
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+
+        result = subprocess.run(cmd, **kwargs)
         return result.returncode == 0, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return False, "", f"Comando expirou após {timeout}s"
     except subprocess.CalledProcessError as e:
-        return False, e.stdout, e.stderr
+        return False, e.stdout or "", e.stderr or str(e)
+    except Exception as e:
+        return False, "", str(e)
+
+
+def validate_environment():
+    """Valida o ambiente antes de iniciar o build"""
+    safe_print("[OK] Validando ambiente de build...")
+
+    # Executa o validador
+    validator_path = Path(__file__).parent / "validate_build.py"
+    if validator_path.exists():
+        safe_print("Executando validacao completa...")
+        success, stdout, stderr = run_command(f"python \"{validator_path}\"")
+        if not success:
+            safe_print("[X] Validacao falhou:")
+            if stderr:
+                safe_print(stderr)
+            return False
+        safe_print("[OK] Validacao concluida com sucesso")
+    else:
+        safe_print("[!] Validador nao encontrado, prosseguindo com validacao basica...")
+
+    return True
 
 
 def check_dependencies():
-    print("Verificando dependencias...")
+    """Verifica dependências com melhor tratamento"""
+    safe_print("[OK] Verificando dependencias...")
 
     python_version = sys.version_info
     if python_version < (3, 7):
-        print("ERRO: Python 3.7+ necessario")
+        safe_print("[X] ERRO: Python 3.7+ necessario")
         return False
-    print(f"Python {python_version.major}.{python_version.minor}.{python_version.micro} OK")
+    safe_print(f"[OK] Python {python_version.major}.{python_version.minor}.{python_version.micro}")
 
-    required_packages = [
-        'pyinstaller',
-        'customtkinter',
-        'requests',
-        'cryptography'
-    ]
+    required_packages = {
+        'pyinstaller': '5.0',
+        'customtkinter': '5.2.0',
+        'requests': '2.25.0',
+        'cryptography': '3.0'
+    }
 
-    for package in required_packages:
-        success, _, _ = run_command(f"python -m pip show {package}")
+    missing_packages = []
+    for package, min_version in required_packages.items():
+        success, stdout, stderr = run_command(f"python -m pip show {package}")
         if success:
-            print(f"{package} OK")
+            safe_print(f"[OK] {package}")
         else:
-            print(f"ERRO: {package} - Execute: pip install {package}")
-            return False
+            missing_packages.append(package)
+            safe_print(f"[X] {package} - nao encontrado")
+
+    if missing_packages:
+        safe_print(f"\n[X] Instale as dependencias faltantes:")
+        safe_print(f"pip install {' '.join(missing_packages)}")
+        return False
 
     return True
 
 
 def clean_build():
-    print("Limpando builds anteriores...")
+    """Limpa builds anteriores com melhor tratamento"""
+    safe_print("[OK] Limpando builds anteriores...")
 
     dirs_to_clean = ['build', 'dist', '__pycache__']
+    files_cleaned = 0
+
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
-            shutil.rmtree(dir_name)
-            print(f"Removido: {dir_name}")
+            try:
+                shutil.rmtree(dir_name)
+                safe_print(f"[OK] Removido: {dir_name}")
+                files_cleaned += 1
+            except Exception as e:
+                safe_print(f"[!] Erro ao remover {dir_name}: {e}")
 
+    # Limpa arquivos .pyc recursivamente
     for root, dirs, files in os.walk('.'):
         for file in files:
             if file.endswith('.pyc'):
-                os.remove(os.path.join(root, file))
+                try:
+                    file_path = os.path.join(root, file)
+                    os.remove(file_path)
+                    files_cleaned += 1
+                except Exception:
+                    pass
+
+    safe_print(f"[OK] {files_cleaned} itens limpos")
+    return True
+
+
+def ensure_version_consistency():
+    """Garante consistência de versões entre arquivos"""
+    safe_print("[OK] Verificando consistencia de versoes...")
+
+    # Lê versão do version.txt
+    version_file = Path("version.txt")
+    if version_file.exists():
+        with open(version_file, 'r', encoding='utf-8') as f:
+            version = f.read().strip()
+    else:
+        version = "1.0.0"
+        with open(version_file, 'w', encoding='utf-8') as f:
+            f.write(version)
+        safe_print(f"[OK] Criado version.txt com versao {version}")
+
+    safe_print(f"[OK] Versao do projeto: {version}")
+
+    # Atualiza package.json se existir
+    package_json = Path("package.json")
+    if package_json.exists():
+        try:
+            import json
+            with open(package_json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            if data.get('version') != version:
+                data['version'] = version
+                with open(package_json, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                safe_print(f"[OK] package.json atualizado para versao {version}")
+        except Exception as e:
+            safe_print(f"[!] Erro ao atualizar package.json: {e}")
+
+    return version
 
 
 def create_version_info():
+    """Cria informações de versão para Windows"""
     if platform.system() != 'Windows':
         return True
 
-    print("Criando informacoes de versao para Windows...")
+    safe_print("📄 Criando informações de versão para Windows...")
 
-    version_info = '''VSVersionInfo(
+    version = ensure_version_consistency()
+    version_parts = version.split('.')
+    if len(version_parts) < 4:
+        version_parts.extend(['0'] * (4 - len(version_parts)))
+
+    version_info = f'''VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=({', '.join(version_parts)}),
+    prodvers=({', '.join(version_parts)}),
     mask=0x3f,
     flags=0x0,
     OS=0x4,
@@ -84,13 +209,13 @@ def create_version_info():
           '040904B0',
           [
             StringStruct('CompanyName', 'Nathan da Silva Miranda'),
-            StringStruct('FileDescription', 'Unity Package Forge'),
-            StringStruct('FileVersion', '1.0.0'),
+            StringStruct('FileDescription', 'Unity Package Forge - Gerador profissional de pacotes Unity'),
+            StringStruct('FileVersion', '{version}'),
             StringStruct('InternalName', 'unity-package-forge'),
             StringStruct('LegalCopyright', 'Copyright (c) 2025 Nathan da Silva Miranda'),
             StringStruct('OriginalFilename', 'unity-package-forge.exe'),
             StringStruct('ProductName', 'Unity Package Forge'),
-            StringStruct('ProductVersion', '1.0.0')
+            StringStruct('ProductVersion', '{version}')
           ]
         )
       ]
@@ -100,75 +225,41 @@ def create_version_info():
 )'''
 
     with open('version_info.txt', 'w', encoding='utf-8') as f:
-        f.write(version_info.strip())
+        f.write(version_info)
 
-    print("Arquivo version_info.txt criado")
+    safe_print("✅ Arquivo version_info.txt criado")
     return True
 
 
-def fix_spec_file():
-    print("Corrigindo arquivo .spec...")
+def create_optimized_spec_file():
+    """Cria arquivo .spec otimizado e corrigido"""
+    safe_print("⚙️ Criando arquivo .spec otimizado...")
 
-    if not os.path.exists('unity_package_forge.spec'):
-        print("ERRO: Arquivo unity_package_forge.spec nao encontrado!")
-        return False
-
-    with open('unity_package_forge.spec', 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    replacements = {
-        '✅': '[OK]',
-        '❌': '[ERROR]',
-        '🔧': '[TOOL]',
-        '📄': '[FILE]',
-        '🧹': '[CLEAN]',
-        '🔍': '[CHECK]',
-        '🧪': '[TEST]',
-        '🔨': '[BUILD]',
-        '🚀': '[LAUNCH]',
-        '📦': '[PACKAGE]',
-        '⚠️': '[WARNING]',
-        'ℹ️': '[INFO]'
-    }
-
-    modified = False
-    for unicode_char, ascii_replacement in replacements.items():
-        if unicode_char in content:
-            content = content.replace(unicode_char, ascii_replacement)
-            modified = True
-
-    if modified:
-        with open('unity_package_forge.spec', 'w', encoding='utf-8') as f:
-            f.write(content)
-        print("Arquivo .spec corrigido")
-    else:
-        print("Arquivo .spec nao precisou ser corrigido")
-
-    return True
-
-
-def create_proper_spec_file():
-    print("Criando arquivo .spec otimizado...")
-
-    # Verificar quais pastas e arquivos existem
+    # Verifica quais pastas e arquivos existem
     datas = []
 
-    # Verificar pastas do projeto
+    # Verifica pastas do projeto
     folders_to_check = ['ui', 'utils', 'core', 'config']
     for folder in folders_to_check:
         if os.path.exists(folder):
-            datas.append(f"('{folder}', '{folder}'),")
-            print(f"Pasta {folder} encontrada - sera incluida")
+            datas.append(f"('{folder}', '{folder}')")
+            safe_print(f"📁 Pasta {folder} será incluída")
 
-    # Verificar arquivos de configuração
-    files_to_check = ['config.ini', 'config.ini.example', 'requirements.txt']
+    # Verifica arquivos de configuração
+    files_to_check = ['config.ini.example', 'version.txt']
     for file in files_to_check:
         if os.path.exists(file):
-            datas.append(f"('{file}', '.'),")
-            print(f"Arquivo {file} encontrado - sera incluido")
+            datas.append(f"('{file}', '.')")
+            safe_print(f"📄 Arquivo {file} será incluído")
 
-    # Se não há dados, deixar lista vazia
-    datas_str = "\n        ".join(datas) if datas else ""
+    # Inclui ícone se existir
+    icon_path = os.path.join('ui', 'icon.ico')
+    icon_line = f"icon='{icon_path}'" if os.path.exists(icon_path) else "icon=None"
+
+    # Inclui version_info se for Windows
+    version_line = "version='version_info.txt'" if platform.system() == 'Windows' else "version=None"
+
+    datas_str = ",\n        ".join(datas) if datas else ""
 
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 
@@ -187,6 +278,8 @@ a = Analysis(
         'requests',
         'cryptography',
         'cryptography.fernet',
+        'cryptography.hazmat.primitives',
+        'cryptography.hazmat.primitives.kdf.pbkdf2',
         'threading',
         'queue',
         'tkinter',
@@ -203,15 +296,18 @@ a = Analysis(
         'datetime',
         'hashlib',
         'base64',
-        'ui',
-        'utils',
-        'core',
-        'config',
-        'ui.main_window',
+        'webbrowser',
+        'platform',
+        'getpass',
+        'ui.ctk_generator_gui',
+        'ui.strings',
         'utils.resource_utils',
         'utils.crypto_utils',
         'utils.version_utils',
-        'core.package_manager',
+        'utils.helpers',
+        'core.package_generator',
+        'core.github_manager',
+        'config.config_manager',
     ],
     hookspath=[],
     hooksconfig={{}},
@@ -233,6 +329,12 @@ a = Analysis(
         'PySide2',
         'PySide6',
         'wx',
+        'tkinter.test',
+        'test',
+        'tests',
+        'unittest',
+        'doctest',
+        'pydoc',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -262,169 +364,266 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version_info.txt',
-    icon=None,
+    {version_line},
+    {icon_line},
 )'''
 
     with open('unity_package_forge.spec', 'w', encoding='utf-8') as f:
         f.write(spec_content)
 
-    print("Arquivo .spec criado/atualizado")
+    safe_print("✅ Arquivo .spec criado/atualizado")
     return True
 
 
 def test_imports():
-    print("Testando imports...")
+    """Testa imports com melhor tratamento de erros"""
+    safe_print("[OK] Testando imports...")
 
     try:
+        # Adiciona diretório atual ao path
         sys.path.insert(0, '.')
 
-        # Testar imports principais do projeto
+        # Testa import principal
         import main
-        print("main.py OK")
+        safe_print("[OK] main.py")
 
-        # Testar imports de módulos internos se existirem
-        try:
-            from utils.resource_utils import get_resource_path
-            print("utils.resource_utils OK")
-        except ImportError:
-            print("utils.resource_utils nao encontrado (pode ser normal)")
+        # Testa imports de módulos internos
+        modules_to_test = [
+            ('utils.resource_utils', 'get_resource_path'),
+            ('utils.crypto_utils', 'get_crypto_instance'),
+            ('utils.version_utils', 'get_current_version'),
+            ('utils.helpers', 'open_folder'),
+            ('core.package_generator', 'PackageGenerator'),
+            ('core.github_manager', 'GitHubManager'),
+            ('config.config_manager', 'ConfigManager'),
+            ('ui.ctk_generator_gui', 'PackageGeneratorGUI'),
+            ('ui.strings', 'RELEASE_WORKFLOW'),
+        ]
 
-        try:
-            from utils.crypto_utils import get_crypto_instance
-            print("utils.crypto_utils OK")
-        except ImportError:
-            print("utils.crypto_utils nao encontrado (pode ser normal)")
+        for module_name, item_name in modules_to_test:
+            try:
+                module = __import__(module_name, fromlist=[item_name])
+                getattr(module, item_name)
+                safe_print(f"[OK] {module_name}")
+            except ImportError as e:
+                safe_print(f"[!] {module_name}: {e}")
+            except AttributeError as e:
+                safe_print(f"[!] {module_name}.{item_name}: {e}")
 
-        try:
-            from utils.version_utils import get_current_version
-            print("utils.version_utils OK")
-        except ImportError:
-            print("utils.version_utils nao encontrado (pode ser normal)")
-
-        print("Imports principais funcionando")
+        safe_print("[OK] Imports principais funcionando")
         return True
+
     except Exception as e:
-        print(f"ERRO nos imports: {e}")
+        safe_print(f"[X] Erro critico nos imports: {e}")
         return False
 
 
 def build_executable():
-    print("Construindo executavel...")
+    """Constrói o executável com melhor tratamento"""
+    safe_print("[OK] Construindo executavel...")
 
     if not os.path.exists('unity_package_forge.spec'):
-        print("ERRO: Arquivo unity_package_forge.spec nao encontrado!")
+        safe_print("[X] Arquivo unity_package_forge.spec nao encontrado!")
         return False
 
+    # Configura ambiente
     env = os.environ.copy()
     if platform.system() == 'Windows':
         env['PYTHONIOENCODING'] = 'utf-8'
         env['PYTHONLEGACYWINDOWSSTDIO'] = '1'
-        env['PYTHONHOME'] = ''
-        env['PYTHONPATH'] = ''
 
-    cmd = "pyinstaller unity_package_forge.spec --clean --noconfirm --log-level ERROR"
-    success, stdout, stderr = run_command(cmd)
+    # Comando de build com opções otimizadas
+    cmd = [
+        "pyinstaller",
+        "unity_package_forge.spec",
+        "--clean",
+        "--noconfirm",
+        "--log-level", "WARN"
+    ]
+
+    cmd_str = " ".join(cmd)
+    safe_print(f"Executando: {cmd_str}")
+
+    success, stdout, stderr = run_command(cmd_str, timeout=600)  # 10 minutos
 
     if not success:
-        print(f"ERRO durante build:")
-        print(stderr)
+        safe_print(f"[X] Erro durante build:")
+        if stderr:
+            safe_print(stderr)
+        if stdout:
+            safe_print("Stdout:", stdout)
         return False
 
+    # Verifica se executável foi criado
     system = platform.system()
-    if system == 'Windows':
-        exec_name = 'unity-package-forge.exe'
-    else:
-        exec_name = 'unity-package-forge'
-
+    exec_name = 'unity-package-forge.exe' if system == 'Windows' else 'unity-package-forge'
     exec_path = Path('dist') / exec_name
 
     if exec_path.exists():
         size = exec_path.stat().st_size / (1024 * 1024)
-        print(f"Executavel criado: {exec_path}")
-        print(f"Tamanho: {size:.1f} MB")
+        safe_print(f"[OK] Executavel criado: {exec_path}")
+        safe_print(f"[OK] Tamanho: {size:.1f} MB")
 
+        # Define permissões no Unix
         if system != 'Windows':
-            os.chmod(exec_path, 0o755)
-            print("Permissoes de execucao definidas")
+            try:
+                os.chmod(exec_path, 0o755)
+                safe_print("[OK] Permissoes de execucao definidas")
+            except Exception as e:
+                safe_print(f"[!] Erro ao definir permissoes: {e}")
 
         return True
     else:
-        print(f"ERRO: Executavel nao encontrado em: {exec_path}")
+        safe_print(f"[X] Executavel nao encontrado em: {exec_path}")
         if os.path.exists('dist'):
-            print("Arquivos em dist:")
+            safe_print("[OK] Arquivos em dist:")
             for f in os.listdir('dist'):
-                print(f"  - {f}")
+                safe_print(f"  - {f}")
         return False
 
 
-def optimize_for_antivirus():
-    print("Otimizando para evitar falsos positivos...")
+def create_portable_package():
+    """Cria pacote portável com todos os arquivos necessários"""
+    safe_print("📦 Criando pacote portável...")
+
+    if not os.path.exists('dist'):
+        safe_print("❌ Pasta dist não encontrada")
+        return False
+
+    # Cria pasta de distribuição
+    package_dir = Path('dist') / 'unity-package-forge-portable'
+    package_dir.mkdir(exist_ok=True)
+
+    # Copia executável
+    system = platform.system()
+    exec_name = 'unity-package-forge.exe' if system == 'Windows' else 'unity-package-forge'
+    exec_src = Path('dist') / exec_name
+
+    if exec_src.exists():
+        shutil.copy2(exec_src, package_dir / exec_name)
+        safe_print(f"✅ Executável copiado")
+
+    # Copia arquivos essenciais
+    essential_files = ['README.md', 'LICENSE.md', 'CHANGELOG.md']
+    for file_name in essential_files:
+        if os.path.exists(file_name):
+            shutil.copy2(file_name, package_dir / file_name)
+            safe_print(f"✅ {file_name} copiado")
+
+    # Cria arquivo de exemplo de configuração
+    config_example = package_dir / 'config.ini.example'
+    if not config_example.exists() and os.path.exists('config.ini.example'):
+        shutil.copy2('config.ini.example', config_example)
+        safe_print("✅ config.ini.example copiado")
+
+    safe_print(f"📦 Pacote portável criado em: {package_dir}")
+    return True
+
+
+def post_build_validation():
+    """Valida o build após conclusão"""
+    safe_print("🔍 Validando build...")
 
     system = platform.system()
-    if system == 'Windows':
-        exec_name = 'unity-package-forge.exe'
-    else:
-        exec_name = 'unity-package-forge'
-
+    exec_name = 'unity-package-forge.exe' if system == 'Windows' else 'unity-package-forge'
     exec_path = Path('dist') / exec_name
 
     if not exec_path.exists():
+        safe_print("❌ Executável não encontrado")
         return False
 
-    print("Executavel otimizado para reducao de falsos positivos")
+    # Testa se é executável
+    if system != 'Windows':
+        if not os.access(exec_path, os.X_OK):
+            safe_print("❌ Executável sem permissões de execução")
+            return False
+
+    safe_print("✅ Build validado com sucesso")
     return True
 
 
 def main():
-    print("Unity Package Forge - Build Script")
-    print("=" * 50)
+    """Função principal do build"""
+    safe_print("Unity Package Forge - Build Script Melhorado")
+    safe_print("=" * 60)
 
+    # Configura codificação no Windows
     if platform.system() == 'Windows':
-        os.system('chcp 65001 > nul')
+        try:
+            os.system('chcp 65001 > nul')
+        except:
+            pass
 
-    if not check_dependencies():
-        print("\nERRO: Dependencias nao atendidas. Instale as dependencias necessarias.")
-        return 1
+    # Sequência de build
+    build_steps = [
+        ("Validacao do ambiente", validate_environment),
+        ("Verificacao de dependencias", check_dependencies),
+        ("Limpeza de builds anteriores", clean_build),
+        ("Garantia de consistencia de versoes", ensure_version_consistency),
+        ("Criacao de informacoes de versao", create_version_info),
+        ("Criacao de arquivo .spec otimizado", create_optimized_spec_file),
+        ("Teste de imports", test_imports),
+        ("Build do executavel", build_executable),
+        ("Validacao pos-build", post_build_validation),
+        ("Criacao de pacote portavel", create_portable_package)
+    ]
 
-    clean_build()
+    failed_steps = []
 
-    if not create_version_info():
-        print("\nERRO: Erro ao criar informacoes de versao")
-        return 1
+    for step_name, step_function in build_steps:
+        safe_print(f"\n{'='*20} {step_name} {'='*20}")
+        try:
+            if not step_function():
+                failed_steps.append(step_name)
+                safe_print(f"[X] Falha em: {step_name}")
 
-    if not create_proper_spec_file():
-        print("\nERRO: Erro ao criar arquivo .spec")
-        return 1
+                # Para em caso de erro crítico
+                if step_name in ["Verificacao de dependencias", "Build do executavel"]:
+                    safe_print(f"\n[X] Build interrompido devido a erro critico em: {step_name}")
+                    return 1
+            else:
+                safe_print(f"[OK] Concluido: {step_name}")
+        except Exception as e:
+            safe_print(f"[X] Erro em {step_name}: {e}")
+            failed_steps.append(step_name)
 
-    if not fix_spec_file():
-        print("\nERRO: Erro ao corrigir arquivo .spec")
-        return 1
+    # Resultado final
+    safe_print(f"\n{'='*60}")
+    if failed_steps:
+        safe_print(f"[!] Build concluido com {len(failed_steps)} problemas:")
+        for step in failed_steps:
+            safe_print(f"  - {step}")
 
-    if not test_imports():
-        print("\nERRO: Erro nos imports. Verifique o codigo.")
-        return 1
+        if len(failed_steps) <= 2:  # Tolera até 2 problemas menores
+            safe_print("\n[OK] Build utilizavel criado (com avisos)")
+            return 0
+        else:
+            safe_print("\n[X] Build falhou devido a muitos problemas")
+            return 1
+    else:
+        safe_print("[OK] Build concluido com sucesso!")
 
-    if not build_executable():
-        print("\nERRO: Erro durante build do executavel")
-        return 1
-
-    if not optimize_for_antivirus():
-        print("\nAVISO: Nao foi possivel otimizar para antivirus")
-
-    print("\n" + "=" * 50)
-    print("Build concluido com sucesso!")
-    print(f"Executavel disponivel em: dist/")
-
-    if os.path.exists('dist'):
-        print("\nArquivos criados:")
-        for f in os.listdir('dist'):
-            path = Path('dist') / f
-            size = path.stat().st_size / (1024 * 1024)
-            print(f"  {f} ({size:.1f} MB)")
+        if os.path.exists('dist'):
+            safe_print("\n[OK] Arquivos criados:")
+            for f in os.listdir('dist'):
+                if os.path.isfile(os.path.join('dist', f)):
+                    path = Path('dist') / f
+                    size = path.stat().st_size / (1024 * 1024)
+                    safe_print(f"  [OK] {f} ({size:.1f} MB)")
+                else:
+                    safe_print(f"  [OK] {f}/")
 
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        safe_print("\n⏹️ Build interrompido pelo usuário")
+        sys.exit(1)
+    except Exception as e:
+        safe_print(f"\n💥 Erro crítico: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

@@ -1,4 +1,4 @@
-requests>=2.25.0
 customtkinter>=5.2.0
-cryptography>=44.0.1
-pyinstaller>=5.0
+requests>=2.25.0
+cryptography>=44.0.0
+pyinstaller>=5.0.0

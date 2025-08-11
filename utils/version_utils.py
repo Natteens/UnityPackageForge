@@ -1,156 +1,324 @@
 import re
 import os
 import sys
+import json
+from pathlib import Path
 
 
 def get_current_version():
+    """Obtém a versão atual do projeto com melhor tratamento de erros"""
     try:
+        # 1. Primeiro tenta ler do version.txt
+        version_file = _find_version_file()
+        if version_file and os.path.exists(version_file):
+            with open(version_file, 'r', encoding='utf-8') as f:
+                version = f.read().strip()
+                if _is_valid_version(version):
+                    return version
+
+        # 2. Tenta extrair do CHANGELOG.md
         changelog_path = _find_changelog_path()
-
         if changelog_path and os.path.exists(changelog_path):
-            with open(changelog_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            version = _extract_version_from_changelog(changelog_path)
+            if version:
+                return version
 
-                patterns = [
-                    r'##\s*\[(\d+\.\d+\.\d+)\]',  # ## [1.2.3]
-                    r'#\s*\[(\d+\.\d+\.\d+)\]',  # # [1.2.3]
-                    r'\[(\d+\.\d+\.\d+)\]',  # [1.2.3] anywhere
-                    r'v(\d+\.\d+\.\d+)',  # v1.2.3
-                    r'(\d+\.\d+\.\d+)'  # 1.2.3 plain
-                ]
-
-                for pattern in patterns:
-                    match = re.search(pattern, content)
-                    if match:
-                        version = match.group(1)
-                        if re.match(r'^\d+\.\d+\.\d+$', version):
-                            print(f"Debug: Versão encontrada no CHANGELOG: {version}")
-                            return version
-
-    except Exception as e:
-        print(f"Erro ao extrair versão do CHANGELOG: {e}")
-
-    try:
+        # 3. Tenta extrair do setup.py
         setup_path = _find_setup_path()
         if setup_path and os.path.exists(setup_path):
-            with open(setup_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                match = re.search(r'version\s*=\s*["\'](\d+\.\d+\.\d+)["\']', content)
-                if match:
-                    version = match.group(1)
-                    print(f"Debug: Versão encontrada no setup.py: {version}")
-                    return version
-    except Exception as e:
-        print(f"Erro ao extrair versão do setup.py: {e}")
+            version = _extract_version_from_setup(setup_path)
+            if version:
+                return version
 
-    try:
-        version_path = _find_version_file()
-        if version_path and os.path.exists(version_path):
-            with open(version_path, 'r', encoding='utf-8') as f:
-                version = f.read().strip()
-                if re.match(r'^\d+\.\d+\.\d+$', version):
-                    print(f"Debug: Versão encontrada no arquivo version.txt: {version}")
-                    return version
-    except Exception as e:
-        print(f"Erro ao ler arquivo de versão: {e}")
+        # 4. Tenta extrair do package.json
+        package_json_path = _find_package_json_path()
+        if package_json_path and os.path.exists(package_json_path):
+            version = _extract_version_from_package_json(package_json_path)
+            if version:
+                return version
 
-    print("Debug: Usando versão padrão 1.0.0")
+    except Exception as e:
+        print(f"Erro ao extrair versão: {e}")
+
+    # Fallback para versão padrão
     return "1.0.0"
 
 
-def _find_changelog_path():
-    possible_paths = []
+def _is_valid_version(version):
+    """Valida se uma string é uma versão válida no formato semver"""
+    if not version:
+        return False
 
-    if getattr(sys, 'frozen', False):
-        app_dir = os.path.dirname(sys.executable)
-        possible_paths.extend([
-            os.path.join(app_dir, 'CHANGELOG.md'),
-            os.path.join(app_dir, '..', 'CHANGELOG.md'),
-            os.path.join(app_dir, 'resources', 'CHANGELOG.md')
-        ])
-    else:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        possible_paths.extend([
-            os.path.join(project_root, 'CHANGELOG.md'),
-            os.path.join(os.path.dirname(project_root), 'CHANGELOG.md')
-        ])
+    # Padrão semver: major.minor.patch(-prerelease)?
+    pattern = r'^(\d+)\.(\d+)\.(\d+)(-[\w\.\-]+)?(\+[\w\.\-]+)?$'
+    return bool(re.match(pattern, version.strip()))
+
+
+def _find_version_file():
+    """Localiza o arquivo version.txt"""
+    possible_paths = [
+        'version.txt',
+        '../version.txt',
+        '../../version.txt'
+    ]
+
+    base_dir = _get_base_directory()
+    for path in possible_paths:
+        full_path = os.path.join(base_dir, path)
+        if os.path.exists(full_path):
+            return full_path
+    return None
+
+
+def _find_changelog_path():
+    """Localiza o arquivo CHANGELOG.md"""
+    base_dir = _get_base_directory()
+    possible_paths = [
+        'CHANGELOG.md',
+        '../CHANGELOG.md',
+        '../../CHANGELOG.md'
+    ]
 
     for path in possible_paths:
-        if os.path.exists(path):
-            print(f"Debug: CHANGELOG encontrado em: {path}")
-            return path
-
-    print(f"Debug: CHANGELOG não encontrado. Caminhos testados: {possible_paths}")
+        full_path = os.path.join(base_dir, path)
+        if os.path.exists(full_path):
+            return full_path
     return None
 
 
 def _find_setup_path():
-    possible_paths = []
-
-    if getattr(sys, 'frozen', False):
-        app_dir = os.path.dirname(sys.executable)
-        possible_paths.extend([
-            os.path.join(app_dir, 'setup.py'),
-            os.path.join(app_dir, '..', 'setup.py')
-        ])
-    else:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        possible_paths.extend([
-            os.path.join(project_root, 'setup.py'),
-            os.path.join(os.path.dirname(project_root), 'setup.py')
-        ])
+    """Localiza o arquivo setup.py"""
+    base_dir = _get_base_directory()
+    possible_paths = [
+        'setup.py',
+        '../setup.py',
+        '../../setup.py'
+    ]
 
     for path in possible_paths:
-        if os.path.exists(path):
-            return path
+        full_path = os.path.join(base_dir, path)
+        if os.path.exists(full_path):
+            return full_path
+    return None
+
+
+def _find_package_json_path():
+    """Localiza o arquivo package.json"""
+    base_dir = _get_base_directory()
+    possible_paths = [
+        'package.json',
+        '../package.json',
+        '../../package.json'
+    ]
+
+    for path in possible_paths:
+        full_path = os.path.join(base_dir, path)
+        if os.path.exists(full_path):
+            return full_path
+    return None
+
+
+def _get_base_directory():
+    """Obtém o diretório base do projeto"""
+    if getattr(sys, 'frozen', False):
+        # Se for executável
+        return os.path.dirname(sys.executable)
+    else:
+        # Se for código fonte
+        current_file = os.path.abspath(__file__)
+        return os.path.dirname(os.path.dirname(current_file))
+
+
+def _extract_version_from_changelog(changelog_path):
+    """Extrai versão do CHANGELOG.md"""
+    try:
+        with open(changelog_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Procura por padrões como [1.0.0] ou ## [1.0.0]
+        patterns = [
+            r'\[(\d+\.\d+\.\d+(?:-[\w\.\-]+)?)\]',
+            r'##\s*\[(\d+\.\d+\.\d+(?:-[\w\.\-]+)?)\]',
+            r'###\s*(\d+\.\d+\.\d+(?:-[\w\.\-]+)?)',
+            r'v(\d+\.\d+\.\d+(?:-[\w\.\-]+)?)'
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, content)
+            if match:
+                version = match.group(1)
+                if _is_valid_version(version):
+                    return version
+
+    except Exception as e:
+        print(f"Erro ao ler CHANGELOG.md: {e}")
 
     return None
 
 
-def _find_version_file():
-    if getattr(sys, 'frozen', False):
-        app_dir = os.path.dirname(sys.executable)
-        return os.path.join(app_dir, 'version.txt')
-    else:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        return os.path.join(project_root, 'version.txt')
-
-
-def create_version_file(version="1.0.0"):
+def _extract_version_from_setup(setup_path):
+    """Extrai versão do setup.py"""
     try:
-        version_path = _find_version_file()
-        os.makedirs(os.path.dirname(version_path), exist_ok=True)
+        with open(setup_path, 'r', encoding='utf-8') as f:
+            content = f.read()
 
-        with open(version_path, 'w', encoding='utf-8') as f:
-            f.write(version)
+        # Procura por version="x.y.z" ou version='x.y.z'
+        pattern = r'version\s*=\s*["\']([^"\']+)["\']'
+        match = re.search(pattern, content)
 
-        print(f"Arquivo de versão criado: {version_path} com versão {version}")
-        return True
+        if match:
+            version = match.group(1)
+            if _is_valid_version(version):
+                return version
+
     except Exception as e:
-        print(f"Erro ao criar arquivo de versão: {e}")
-        return False
+        print(f"Erro ao ler setup.py: {e}")
+
+    return None
+
+
+def _extract_version_from_package_json(package_json_path):
+    """Extrai versão do package.json"""
+    try:
+        with open(package_json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        if 'version' in data:
+            version = data['version']
+            if _is_valid_version(version):
+                return version
+
+    except Exception as e:
+        print(f"Erro ao ler package.json: {e}")
+
+    return None
 
 
 def sanitize_name_for_repo(display_name):
-    sanitized = display_name.lower().replace(' ', '-')
-    sanitized = re.sub(r'[^a-z0-9\-]', '', sanitized)
+    """Converte nome de exibição para nome válido de repositório GitHub"""
+    if not display_name:
+        return "unity-package"
+
+    # Remove caracteres especiais e espaços
+    sanitized = re.sub(r'[^\w\s\-]', '', display_name.strip())
+
+    # Substitui espaços por hífens
+    sanitized = re.sub(r'\s+', '-', sanitized)
+
+    # Remove múltiplos hífens
     sanitized = re.sub(r'-+', '-', sanitized)
+
+    # Remove hífens do início e fim
     sanitized = sanitized.strip('-')
+
+    # Converte para minúsculas
+    sanitized = sanitized.lower()
+
+    # Garante que não está vazio
+    if not sanitized:
+        sanitized = "unity-package"
+
+    # Garante que não seja muito longo (GitHub tem limite de 100 chars)
+    if len(sanitized) > 80:
+        sanitized = sanitized[:80].rstrip('-')
+
     return sanitized
 
 
-def extract_package_name_from_full_name(full_name):
-    if '.' in full_name:
-        parts = full_name.split('.')
-        return parts[-1]
-    return full_name
-
-
 def get_namespace_from_display_name(display_name):
-    namespace = re.sub(r'[^a-zA-Z0-9]', '', display_name)
-    if namespace and not namespace[0].isalpha():
-        namespace = 'Package' + namespace
-    return namespace or 'PackageNamespace'
+    """Gera namespace C# a partir do nome de exibição"""
+    if not display_name:
+        return "UnityPackage"
+
+    # Remove caracteres especiais
+    sanitized = re.sub(r'[^\w\s]', '', display_name.strip())
+
+    # Divide por espaços e capitaliza cada palavra
+    words = sanitized.split()
+    namespace_parts = []
+
+    for word in words:
+        if word:
+            # Capitaliza primeira letra e mantém o resto
+            clean_word = word[0].upper() + word[1:] if len(word) > 1 else word.upper()
+            # Remove números do início se existirem
+            clean_word = re.sub(r'^[\d]+', '', clean_word)
+            if clean_word:
+                namespace_parts.append(clean_word)
+
+    if not namespace_parts:
+        return "UnityPackage"
+
+    return "".join(namespace_parts)
+
+
+def extract_package_name_from_full_name(full_name):
+    """Extrai nome do pacote removendo prefixos de empresa"""
+    if not full_name:
+        return "package"
+
+    # Remove prefixos comuns
+    prefixes_to_remove = [
+        'com.unity.',
+        'com.microsoft.',
+        'com.google.',
+        'com.example.',
+        'com.company.',
+        'com.',
+        'org.',
+        'net.',
+        'io.'
+    ]
+
+    clean_name = full_name.lower()
+    for prefix in prefixes_to_remove:
+        if clean_name.startswith(prefix):
+            clean_name = clean_name[len(prefix):]
+            break
+
+    # Remove caracteres especiais exceto pontos
+    clean_name = re.sub(r'[^\w\.]', '', clean_name)
+
+    # Se tem ponto, pega a última parte
+    if '.' in clean_name:
+        clean_name = clean_name.split('.')[-1]
+
+    return clean_name if clean_name else "package"
+
+
+def increment_version(version, increment_type='patch'):
+    """Incrementa versão seguindo semver"""
+    if not _is_valid_version(version):
+        return "1.0.0"
+
+    parts = version.split('.')
+    major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+
+    if increment_type == 'major':
+        major += 1
+        minor = 0
+        patch = 0
+    elif increment_type == 'minor':
+        minor += 1
+        patch = 0
+    else:  # patch
+        patch += 1
+
+    return f"{major}.{minor}.{patch}"
+
+
+def compare_versions(version1, version2):
+    """Compara duas versões. Retorna -1, 0, ou 1"""
+    if not _is_valid_version(version1) or not _is_valid_version(version2):
+        return 0
+
+    v1_parts = [int(x) for x in version1.split('.')]
+    v2_parts = [int(x) for x in version2.split('.')]
+
+    for i in range(3):
+        if v1_parts[i] < v2_parts[i]:
+            return -1
+        elif v1_parts[i] > v2_parts[i]:
+            return 1
+
+    return 0

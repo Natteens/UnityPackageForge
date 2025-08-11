@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 2, 13, 0),
+    prodvers=(1, 2, 13, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x4,
@@ -16,13 +16,13 @@ VSVersionInfo(
           '040904B0',
           [
             StringStruct('CompanyName', 'Nathan da Silva Miranda'),
-            StringStruct('FileDescription', 'Unity Package Forge'),
-            StringStruct('FileVersion', '1.0.0'),
+            StringStruct('FileDescription', 'Unity Package Forge - Gerador profissional de pacotes Unity'),
+            StringStruct('FileVersion', '1.2.13'),
             StringStruct('InternalName', 'unity-package-forge'),
             StringStruct('LegalCopyright', 'Copyright (c) 2025 Nathan da Silva Miranda'),
             StringStruct('OriginalFilename', 'unity-package-forge.exe'),
             StringStruct('ProductName', 'Unity Package Forge'),
-            StringStruct('ProductVersion', '1.0.0')
+            StringStruct('ProductVersion', '1.2.13')
           ]
         )
       ]

@@ -391,8 +391,8 @@ UNITY_DEPENDENCIES = {
     }
 }
 
-# GitHub Workflow para Semantic Release
-RELEASE_WORKFLOW = """name: Release and Build
+# GitHub Workflow para Semantic Release - VERSÃO MELHORADA
+RELEASE_WORKFLOW = """name: release
 
 on:
   push:
@@ -406,146 +406,130 @@ permissions:
 
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
-    outputs:
-      released: ${{ steps.release.outputs.released }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '18'
 
-      - name: Install Semantic Release
-        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/github @semantic-release/commit-analyzer @semantic-release/release-notes-generator
-
-      - name: Get tag before release
-        id: tag_before
+      - name: Filter Unity dependencies dynamically
         run: |
-          TAG_BEFORE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "tag_before=${{TAG_BEFORE}}" >> $GITHUB_OUTPUT
-          echo "Tag before release: ${{TAG_BEFORE}}"
+          # Verifica se o package.json existe e tem uma seção dependencies
+          if [ -f package.json ] && jq -e '.dependencies // empty | type=="object"' package.json > /dev/null; then
+            # Identifica pacotes relacionados à Unity no package.json e os remove
+            unity_packages=$(jq -r '.dependencies | keys[] | select(test("unity|Unity|com.unity"))' package.json 2>/dev/null || echo "")
+            echo "Pacotes Unity encontrados: $unity_packages"
 
-      - name: Release
-        id: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          semantic-release
-          
-          # Get tag after release
-          TAG_AFTER=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          TAG_BEFORE="${{ steps.tag_before.outputs.tag_before }}"
-          
-          echo "Tag before: ${{TAG_BEFORE}}"
-          echo "Tag after: ${{TAG_AFTER}}"
-          
-          # Check if a new tag was created
-          if [ "${{TAG_AFTER}}" != "${{TAG_BEFORE}}" ] && [ -n "${{TAG_AFTER}}" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "tag_name=${{TAG_AFTER}}" >> $GITHUB_OUTPUT
-            echo "✅ New release created: ${{TAG_AFTER}}"
+            if [ -n "$unity_packages" ]; then
+              echo "Removendo pacotes Unity..."
+              for pkg in $unity_packages; do
+                jq "del(.dependencies[\"$pkg\"])" package.json > package.filtered.json
+                mv package.filtered.json package.json
+              done
+            fi
           else
-            echo "released=false" >> $GITHUB_OUTPUT
-            echo "tag_name=" >> $GITHUB_OUTPUT
-            echo "ℹ️ No release created - no qualifying commits"
+            echo "Não foram encontradas dependências no package.json ou o arquivo não existe."
           fi
 
-  build-executables:
-    needs: release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            name: windows
-            ext: .exe
-          - os: ubuntu-latest
-            name: linux
-            ext: ''
-          - os: macos-latest
-            name: macos
-            ext: ''
+      - name: Install dependencies (no lock)
+        run: npm install --no-package-lock
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"""
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install system dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-tk
-
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
-
-    - name: Build executable
-      run: pyinstaller --onefile --name "package-${{ matrix.name }}" main.py
-
-    - name: Upload executable to release
-      if: needs.release.outputs.released == 'true'
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/package-${{ matrix.name }}${{ matrix.ext }}
-        tag_name: ${{ needs.release.outputs.tag_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload executable as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: package-${{ matrix.name }}
-        path: dist/package-${{ matrix.name }}${{ matrix.ext }}
-"""
-
-# Configuração do Semantic Release
-RELEASERC_JSON = """{{
+# Configuração do Semantic Release otimizada - VERSÃO MELHORADA
+RELEASERC_JSON = """{
   "branches": ["main"],
   "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          {"type": "feat", "release": "minor"},
+          {"type": "fix", "release": "patch"},
+          {"type": "perf", "release": "patch"},
+          {"type": "refactor", "release": "patch"},
+          {"type": "docs", "release": false},
+          {"type": "style", "release": false},
+          {"type": "test", "release": false},
+          {"type": "ci", "release": false},
+          {"type": "chore", "release": false},
+          {"breaking": true, "release": "major"}
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            {"type": "feat", "section": "✨ Features"},
+            {"type": "fix", "section": "🐛 Bug Fixes"},
+            {"type": "perf", "section": "⚡ Performance"},
+            {"type": "refactor", "section": "♻️ Refactoring"},
+            {"type": "docs", "section": "📚 Documentation", "hidden": false},
+            {"type": "style", "section": "💄 Styling", "hidden": true},
+            {"type": "test", "section": "🧪 Tests", "hidden": true},
+            {"type": "ci", "section": "🔧 CI/CD", "hidden": true},
+            {"type": "chore", "section": "🔧 Maintenance", "hidden": true}
+          ]
+        }
+      }
+    ],
     [
       "@semantic-release/changelog",
-      {{
-        "changelogFile": "CHANGELOG.md"
-      }}
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# 📋 Changelog\\n\\nTodas as mudanças notáveis neste projeto serão documentadas neste arquivo.\\n\\nO formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),\\ne este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\\n"
+      }
+    ],
+    [
+      "@semantic-release/npm",
+      {
+        "npmPublish": false
+      }
     ],
     [
       "@semantic-release/github",
-      {{
+      {
         "assets": [
-          {{
+          {
             "path": "package.json",
-            "label": "Unity Package Manifest"
-          }}
-        ]
-      }}
+            "label": "Unity Package Manifest",
+            "name": "package.json"
+          }
+        ],
+        "successComment": false,
+        "failComment": false,
+        "releasedLabels": false
+      }
     ],
     [
       "@semantic-release/git",
-      {{
+      {
         "assets": ["package.json", "CHANGELOG.md"],
-        "message": "chore(release): ${{nextRelease.version}} [skip ci]\\n\\n${{nextRelease.notes}}"
-      }}
+        "message": "chore(release): v${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
+      }
     ]
   ]
-}}"""
+}"""
 
 # GitIgnore para Unity
 GITIGNORE_UNITY = """# Unity generated files
@@ -661,7 +645,7 @@ FILE_CHANGELOG = "CHANGELOG.md"
 FILE_LICENSE = "LICENSE.md"
 FILE_GITIGNORE = ".gitignore"
 FILE_RELEASERC = ".releaserc.json"
-FILE_RELEASE_WORKFLOW = "ci-cd.yml"
+FILE_RELEASE_WORKFLOW = "release.yml"
 
 # Common Unity Package IDs
 UNITY_PACKAGE_IDS = {
@@ -689,6 +673,3 @@ FONT_SIZE_HEADER = 14
 FONT_SIZE_NORMAL = 12
 FONT_SIZE_SMALL = 10
 FONT_SIZE_TINY = 8
-
-
-
