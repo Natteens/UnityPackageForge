@@ -1,7 +1,7 @@
 {
   "name": "unity-package-forge",
-  "version": "1.2.13",
-  "description": "Unity Package Forge - Gerador profissional de pacotes Unity",
+  "version": "1.0.0",
+  "description": "Unity Package Forge",
   "main": "main.py",
   "repository": {
     "type": "git",
@@ -10,10 +10,7 @@
   "keywords": [
     "unity",
     "package",
-    "generator",
-    "gamedev",
-    "unity3d",
-    "upm"
+    "generator"
   ],
   "author": "Nathan da Silva Miranda",
   "license": "MIT",
@@ -21,8 +18,8 @@
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^11.0.3",
+    "@semantic-release/github": "^11.0.4",
     "@semantic-release/release-notes-generator": "^14.0.3",
-    "semantic-release": "^24.2.6"
+    "semantic-release": "^24.2.7"
   }
 }

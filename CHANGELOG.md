@@ -1,3 +1,10 @@
+## [1.2.17](https://github.com/Natteens/UnityPackageForge/compare/v1.2.16...v1.2.17) (2025-08-11)
+
+
+### Bug Fixes
+
+* Improve build script robustness and update dependencies ([d51adf5](https://github.com/Natteens/UnityPackageForge/commit/d51adf5cd58347ca27a5e630fb9d66f19d2737e6))
+
 ## [1.2.16](https://github.com/Natteens/UnityPackageForge/compare/v1.2.15...v1.2.16) (2025-07-03)
 
 
