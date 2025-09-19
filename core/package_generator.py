@@ -47,9 +47,20 @@ class PackageGenerator:
         unity_version = self.config.get_value(key='unity_version', default='2021.3')
 
         repo_name = self.get_sanitized_repo_name(display_name)
+        
+        # Garantir que o nome do pacote seja válido
+        package_name = extract_package_name_from_full_name(name).lower()
+        if not package_name:
+            package_name = display_name.lower().replace(' ', '')
+            self.log(f"⚠️ Nome do pacote inválido, usando alternativa: {package_name}")
+
+        # Garantir que a versão seja válida
+        if not version or not version.replace('.', '').isdigit():
+            version = "0.1.0"
+            self.log(f"⚠️ Versão inválida, usando padrão: {version}")
 
         package_data = {
-            "name": f"{company_prefix}.{extract_package_name_from_full_name(name).lower()}",
+            "name": f"{company_prefix}.{package_name}",
             "version": version,
             "displayName": display_name,
             "description": description,
@@ -67,6 +78,19 @@ class PackageGenerator:
 
         if unity_dependencies:
             package_data["dependencies"] = unity_dependencies
+
+        # Validar o JSON gerado
+        try:
+            json.dumps(package_data)
+        except Exception as e:
+            self.log(f"⚠️ Erro ao gerar package.json: {str(e)}. Usando formato simplificado.")
+            # Formato simplificado como fallback
+            package_data = {
+                "name": f"{company_prefix}.{package_name}",
+                "version": version,
+                "displayName": display_name,
+                "description": description
+            }
 
         return package_data
 
@@ -98,6 +122,19 @@ class PackageGenerator:
                                  create_samples=True, create_runtime=True, create_editor=True,
                                  create_tests=True, create_github=True, license_type="MIT",
                                  unity_dependencies=None):
+
+        # Validações iniciais
+        if not base_path or not os.path.exists(base_path):
+            self.log("❌ Caminho base inválido ou inexistente")
+            raise ValueError("Caminho base inválido ou inexistente")
+            
+        if not name or not display_name:
+            self.log("❌ Nome do pacote ou nome de exibição não podem estar vazios")
+            raise ValueError("Nome do pacote ou nome de exibição não podem estar vazios")
+            
+        if not description:
+            self.log("⚠️ Descrição vazia, usando valor padrão")
+            description = f"Um pacote Unity para {display_name}"
 
         # Reset do estado e marca como ocupado
         self._reset_state()
@@ -198,9 +235,30 @@ class PackageGenerator:
 
     def _create_file(self, path, content):
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            # Garantir que o diretório exista
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+                
+            # Verificar se o arquivo já existe e fazer backup se necessário
+            if os.path.exists(path):
+                self.log(f"⚠️ Arquivo já existe, criando backup: {path}")
+                backup_path = f"{path}.bak"
+                try:
+                    import shutil
+                    shutil.copy2(path, backup_path)
+                except Exception as backup_error:
+                    self.log(f"⚠️ Não foi possível criar backup: {str(backup_error)}")
+            
+            # Escrever o conteúdo no arquivo
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(content)
+                
+            # Verificar se o arquivo foi criado corretamente
+            if not os.path.exists(path):
+                raise IOError(f"Falha ao verificar a existência do arquivo após criação: {path}")
+                
+            return True
         except Exception as e:
             self.log(f"❌ Erro ao criar arquivo {path}: {str(e)}")
             raise
@@ -304,22 +362,42 @@ class PackageGenerator:
             self._create_file(os.path.join(base_path, "LICENSE.md"), license_content)
             self.log("📄 Licença MIT criada")
 
+    def _validate_json_string(self, json_string, file_name):
+        """Valida se uma string é um JSON válido"""
+        try:
+            json.loads(json_string)
+            return True
+        except json.JSONDecodeError as e:
+            self.log(f"❌ Erro de validação JSON em {file_name}: {str(e)}")
+            return False
+            
     def _create_github_files(self, base_path, display_name, version):
         from ui.strings import RELEASE_WORKFLOW, RELEASERC_JSON, GITIGNORE_UNITY
 
         github_path = os.path.join(base_path, ".github", "workflows")
         os.makedirs(github_path, exist_ok=True)
 
+        # Validar e criar o arquivo release.yml
         self._create_file(
             os.path.join(github_path, "release.yml"),
             RELEASE_WORKFLOW
         )
 
-        self._create_file(
-            os.path.join(base_path, ".releaserc.json"),
-            RELEASERC_JSON.format(version=version)
-        )
+        # Validar e criar o arquivo .releaserc.json
+        if self._validate_json_string(RELEASERC_JSON, ".releaserc.json"):
+            self._create_file(
+                os.path.join(base_path, ".releaserc.json"),
+                RELEASERC_JSON
+            )
+        else:
+            self.log("⚠️ Usando configuração de release padrão devido a erro de validação")
+            default_releaserc = '{"branches":["main"],"plugins":["@semantic-release/commit-analyzer","@semantic-release/release-notes-generator","@semantic-release/github"]}'
+            self._create_file(
+                os.path.join(base_path, ".releaserc.json"),
+                default_releaserc
+            )
 
+        # Criar o arquivo .gitignore
         self._create_file(os.path.join(base_path, ".gitignore"), GITIGNORE_UNITY)
 
         self.log("🔧 Arquivos GitHub criados")

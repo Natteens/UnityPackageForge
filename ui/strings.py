@@ -391,7 +391,7 @@ UNITY_DEPENDENCIES = {
     }
 }
 
-# GitHub Workflow para Semantic Release - VERSÃO MELHORADA
+# Workflow de Release para GitHub Actions
 RELEASE_WORKFLOW = """name: release
 
 on:
@@ -452,82 +452,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"""
 
-# Configuração do Semantic Release otimizada - VERSÃO MELHORADA
+# Configuração do Semantic Release otimizada
 RELEASERC_JSON = """{
   "branches": ["main"],
   "plugins": [
-    [
-      "@semantic-release/commit-analyzer",
-      {
-        "preset": "conventionalcommits",
-        "releaseRules": [
-          {"type": "feat", "release": "minor"},
-          {"type": "fix", "release": "patch"},
-          {"type": "perf", "release": "patch"},
-          {"type": "refactor", "release": "patch"},
-          {"type": "docs", "release": false},
-          {"type": "style", "release": false},
-          {"type": "test", "release": false},
-          {"type": "ci", "release": false},
-          {"type": "chore", "release": false},
-          {"breaking": true, "release": "major"}
-        ]
-      }
-    ],
-    [
-      "@semantic-release/release-notes-generator",
-      {
-        "preset": "conventionalcommits",
-        "presetConfig": {
-          "types": [
-            {"type": "feat", "section": "✨ Features"},
-            {"type": "fix", "section": "🐛 Bug Fixes"},
-            {"type": "perf", "section": "⚡ Performance"},
-            {"type": "refactor", "section": "♻️ Refactoring"},
-            {"type": "docs", "section": "📚 Documentation", "hidden": false},
-            {"type": "style", "section": "💄 Styling", "hidden": true},
-            {"type": "test", "section": "🧪 Tests", "hidden": true},
-            {"type": "ci", "section": "🔧 CI/CD", "hidden": true},
-            {"type": "chore", "section": "🔧 Maintenance", "hidden": true}
-          ]
-        }
-      }
-    ],
-    [
-      "@semantic-release/changelog",
-      {
-        "changelogFile": "CHANGELOG.md",
-        "changelogTitle": "# 📋 Changelog\\n\\nTodas as mudanças notáveis neste projeto serão documentadas neste arquivo.\\n\\nO formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),\\ne este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\\n"
-      }
-    ],
-    [
-      "@semantic-release/npm",
-      {
-        "npmPublish": false
-      }
-    ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": [
-          {
-            "path": "package.json",
-            "label": "Unity Package Manifest",
-            "name": "package.json"
-          }
-        ],
-        "successComment": false,
-        "failComment": false,
-        "releasedLabels": false
-      }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["package.json", "CHANGELOG.md"],
-        "message": "chore(release): v${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
-      }
-    ]
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    ["@semantic-release/npm", { "npmPublish": false }],
+    ["@semantic-release/git", {
+      "assets": ["package.json", "CHANGELOG.md"],
+      "message": "chore(release): ${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
+    }],
+    "@semantic-release/github"
   ]
 }"""
 

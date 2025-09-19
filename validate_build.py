@@ -28,7 +28,7 @@ class BuildValidator:
         self.errors = []
         self.warnings = []
         self.project_root = Path(__file__).parent
-
+        
         # Configurar stdout para UTF-8 no Windows
         if sys.platform == "win32":
             try:
@@ -91,7 +91,7 @@ class BuildValidator:
 
         required_packages = [
             'customtkinter',
-            'requests',
+            'requests', 
             'cryptography',
             'pyinstaller'
         ]
