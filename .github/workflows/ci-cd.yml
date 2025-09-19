@@ -181,7 +181,19 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
+        pip install pyinstaller pillow
+        
+        # Verificar se PIL está instalado corretamente
+        python -c "import PIL; print('PIL instalado:', PIL.__version__)"
+        
+        # Verificar dependências do sistema para tkinter
+        if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          echo "Verificando dependências do sistema para tkinter no Ubuntu"
+          dpkg -l | grep -i tk
+        elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+          echo "Verificando dependências do sistema para tkinter no macOS"
+          brew list | grep -i tk
+        fi
 
     - name: Create version info for Windows
       if: matrix.os == 'windows-latest'
@@ -242,20 +254,154 @@ jobs:
         fi
       shell: bash
 
-    - name: Build executable
+    - name: Generate spec file and build executable
       run: |
         echo "Building Unity Package Forge..."
         echo "Version: ${{ needs.release.outputs.version }}"
         echo "OS: ${{ matrix.os }}"
         
-        # Verificar se o arquivo spec existe
+        # Gerar arquivo spec se não existir
         if [ ! -f "unity_package_forge.spec" ]; then
-          echo "❌ Spec file not found!"
-          exit 1
+          echo "⚠️ Spec file not found, generating..."
+          python -c "
+          import os
+          import platform
+          
+          # Determinar configurações específicas da plataforma
+          is_windows = platform.system() == 'Windows'
+          icon_path = os.path.join('ui', 'icon.ico')
+          icon_line = f\"icon='{icon_path}'\" if os.path.exists(icon_path) else \"icon=None\"
+          version_line = \"version='version_info.txt'\" if is_windows else \"version=None\"
+          
+          # Criar conteúdo do spec
+          spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
+          
+          block_cipher = None
+          
+          a = Analysis(
+              ['main.py'],
+              pathex=[],
+              binaries=[],
+              datas=[],
+              hiddenimports=[
+                  'customtkinter',
+                  'requests',
+                  'cryptography',
+                  'cryptography.fernet',
+                  'cryptography.hazmat.primitives',
+                  'cryptography.hazmat.primitives.kdf.pbkdf2',
+                  'threading',
+                  'queue',
+                  'tkinter',
+                  'tkinter.ttk',
+                  'tkinter.messagebox',
+                  'tkinter.filedialog',
+                  'json',
+                  'configparser',
+                  'pathlib',
+                  'subprocess',
+                  'shutil',
+                  'zipfile',
+                  'tempfile',
+                  'datetime',
+                  'hashlib',
+                  'base64',
+                  'webbrowser',
+                  'platform',
+                  'getpass',
+                  'ui.ctk_generator_gui',
+                  'ui.strings',
+                  'utils.resource_utils',
+                  'utils.crypto_utils',
+                  'utils.version_utils',
+                  'utils.helpers',
+                  'core.package_generator',
+                  'core.github_manager',
+                  'config.config_manager',
+              ],
+              hookspath=[],
+              hooksconfig={{}},
+              runtime_hooks=[],
+              excludes=[
+                  'matplotlib',
+                  'numpy',
+                  'pandas',
+                  'scipy',
+                  'jupyter',
+                  'notebook',
+                  'IPython',
+                  'tornado',
+                  'zmq',
+                  'pygame',
+                  'cv2',
+                  'PyQt5',
+                  'PyQt6',
+                  'PySide2',
+                  'PySide6',
+                  'wx',
+                  'tkinter.test',
+                  'test',
+                  'tests',
+                  'unittest',
+                  'doctest',
+                  'pydoc',
+              ],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False,
+          )
+          
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          
+          exe = EXE(
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
+              [],
+              name='unity-package-forge',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=False,
+              upx_exclude=[],
+              runtime_tmpdir=None,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None,
+              {version_line},
+              {icon_line},
+          )'''
+          
+          # Escrever arquivo spec
+          with open('unity_package_forge.spec', 'w', encoding='utf-8') as f:
+              f.write(spec_content)
+          
+          print('✅ Arquivo unity_package_forge.spec criado com sucesso!')
+          "
         fi
         
-        # Construir o executável
-        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
+        # Construir o executável com opções para resolver problemas de importação
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          # No Windows, incluir PIL._tkinter_finder e usar o arquivo spec
+          pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO --hidden-import PIL._tkinter_finder
+        else
+          # No Linux/macOS, excluir _tkinter para evitar problemas
+          pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO --exclude-module _tkinter
+        fi
+        
+        # Verificar resultado da build
+        echo "Verificando resultado da build:"
+        if [ -d "dist" ]; then
+          find dist -type f | sort
+        else
+          echo "Diretório dist não foi criado!"
+        fi
       shell: bash
 
     - name: Verify and prepare build
@@ -270,25 +416,29 @@ jobs:
         echo "Conteúdo do diretório dist:"
         ls -la dist/
         
-        # Localizar o executável
+        # Localizar o executável - verificar tanto na raiz quanto em subdiretórios
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           EXEC_NAME="unity-package-forge.exe"
         else
           EXEC_NAME="unity-package-forge"
         fi
         
-        EXEC_PATH="dist/$EXEC_NAME"
+        # Procurar o executável em dist e seus subdiretórios
+        EXEC_PATH=$(find dist -name "$EXEC_NAME" -type f | head -n 1)
         
-        if [ -f "$EXEC_PATH" ]; then
+        if [ -n "$EXEC_PATH" ] && [ -f "$EXEC_PATH" ]; then
           echo "✅ Executável encontrado: $EXEC_PATH"
           
           # Verificar tamanho
           SIZE=$(du -h "$EXEC_PATH" | cut -f1)
           echo "Tamanho: $SIZE"
           
-          # Renomear para o nome final
-          mv "$EXEC_PATH" "dist/${{ matrix.artifact_name }}"
-          echo "✅ Renomeado para: ${{ matrix.artifact_name }}"
+          # Criar diretório dist se não existir (por precaução)
+          mkdir -p dist
+          
+          # Copiar para o nome final (em vez de mover, para evitar problemas de permissão)
+          cp "$EXEC_PATH" "dist/${{ matrix.artifact_name }}"
+          echo "✅ Copiado para: dist/${{ matrix.artifact_name }}"
           
           # Tornar executável no Linux/macOS
           if [ "${{ matrix.os }}" != "windows-latest" ]; then
@@ -298,7 +448,7 @@ jobs:
         else
           echo "❌ Executável não encontrado!"
           echo "Procurando por arquivos na pasta dist:"
-          find dist -type f -name "*" || echo "Nenhum arquivo encontrado"
+          find dist -type f | sort
           exit 1
         fi
       shell: bash
