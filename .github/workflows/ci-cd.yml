@@ -409,15 +409,41 @@ jobs:
         }
         
         # Construir o executável com opções para resolver problemas de importação
-        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO --hidden-import PIL._tkinter_finder
+         # Não usar --hidden-import quando já temos um arquivo .spec
+         pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
         
         # Verificar resultado da build
-        echo "Verificando resultado da build:"
-        if (Test-Path "dist") {
-          Get-ChildItem -Path dist -Recurse -File | Sort-Object FullName
-        } else {
-          echo "Diretório dist não foi criado!"
-        }
+         echo "Verificando resultado da build:"
+         if (Test-Path "dist") {
+           echo "✅ Diretório dist encontrado"
+           $files = Get-ChildItem -Path dist -Recurse -File | Sort-Object FullName
+           echo "Arquivos encontrados:"
+           $files | ForEach-Object { echo $_.FullName }
+           
+           # Verificar se o executável foi criado
+           $exeFiles = $files | Where-Object { $_.Name -like "*.exe" }
+           if ($exeFiles.Count -gt 0) {
+             echo "✅ Executáveis encontrados: $($exeFiles.Count)"
+           } else {
+             echo "❌ Nenhum executável encontrado!"
+             
+             # Verificar logs do PyInstaller
+             if (Test-Path "build\unity-package-forge\warn-unity-package-forge.txt") {
+               echo "Logs de aviso do PyInstaller:"
+               Get-Content "build\unity-package-forge\warn-unity-package-forge.txt"
+             }
+           }
+         } else {
+           echo "❌ Diretório dist não foi criado!"
+           
+           # Verificar se o diretório build foi criado
+           if (Test-Path "build") {
+             echo "Diretório build encontrado, verificando conteúdo:"
+             Get-ChildItem -Path build -Recurse -Directory | Select-Object -First 5 | ForEach-Object { echo $_.FullName }
+           } else {
+             echo "Diretório build também não foi criado!"
+           }
+         }
       shell: pwsh
       
     - name: Generate spec file and build executable (Unix)
@@ -555,15 +581,45 @@ jobs:
         fi
         
         # Construir o executável com opções para resolver problemas de importação
-        pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO --exclude-module _tkinter
+         # Não usar --exclude-module quando já temos um arquivo .spec
+         pyinstaller unity_package_forge.spec --clean --noconfirm --log-level INFO
         
         # Verificar resultado da build
-        echo "Verificando resultado da build:"
-        if [ -d "dist" ]; then
-          find dist -type f | sort
-        else
-          echo "Diretório dist não foi criado!"
-        fi
+         echo "Verificando resultado da build:"
+         if [ -d "dist" ]; then
+           echo "✅ Diretório dist encontrado"
+           echo "Arquivos encontrados:"
+           find dist -type f | sort
+           
+           # Verificar se o executável foi criado
+           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+             EXEC_COUNT=$(find dist -name "unity-package-forge" -type f | wc -l)
+           else
+             EXEC_COUNT=$(find dist -name "unity-package-forge" -type f | wc -l)
+           fi
+           
+           if [ "$EXEC_COUNT" -gt 0 ]; then
+             echo "✅ Executáveis encontrados: $EXEC_COUNT"
+           else
+             echo "❌ Nenhum executável encontrado!"
+             
+             # Verificar logs do PyInstaller
+             if [ -f "build/unity-package-forge/warn-unity-package-forge.txt" ]; then
+               echo "Logs de aviso do PyInstaller:"
+               cat "build/unity-package-forge/warn-unity-package-forge.txt"
+             fi
+           fi
+         else
+           echo "❌ Diretório dist não foi criado!"
+           
+           # Verificar se o diretório build foi criado
+           if [ -d "build" ]; then
+             echo "Diretório build encontrado, verificando conteúdo:"
+             find build -type d | head -n 5
+           else
+             echo "Diretório build também não foi criado!"
+           fi
+         fi
       shell: bash
 
     - name: Verify and prepare build (Windows)
