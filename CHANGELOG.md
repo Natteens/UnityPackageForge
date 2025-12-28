@@ -1,3 +1,10 @@
+## [1.2.18](https://github.com/Natteens/UnityPackageForge/compare/v1.2.17...v1.2.18) (2025-12-28)
+
+
+### Bug Fixes
+
+* release.yml corrigido ([5d7b71b](https://github.com/Natteens/UnityPackageForge/commit/5d7b71bfdbc2b554581311283a6e6cb07a945c1e))
+
 ## [1.2.17](https://github.com/Natteens/UnityPackageForge/compare/v1.2.16...v1.2.17) (2025-08-11)
 
 
